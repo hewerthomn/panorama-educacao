@@ -6,6 +6,7 @@ import pytest
 from edu_panorama.cli import main, years_list
 from edu_panorama.etl import load_year, aggregate_year, bool_value
 from edu_panorama.geo import feature_code
+from edu_panorama.catalog import UFS, INDICATORS, INFRASTRUCTURE_FIELDS
 
 
 def make_zip(path: Path, files: dict[str, str]):
@@ -104,3 +105,126 @@ def test_year_validation():
     assert years_list('2020:2023') == [2020,2021,2022,2023]
     assert years_list('2025,2024') == [2024,2025]
     with pytest.raises(Exception): years_list('2024:2023')
+
+
+def infrastructure(row, metric='agua_potavel'):
+    return dict(zip(INFRASTRUCTURE_FIELDS, row['infrastructure'][metric]))
+
+
+def school(code, answer, enrollments, mun='1100205', rede='3', area='1'):
+    return {'id': code, 'municipio': mun, 'rede': rede, 'localizacao': area,
+            'matriculas': enrollments, 'indicators': {'agua_potavel': answer}}
+
+
+def test_enrollment_classification_and_dimensions():
+    schools = [school('1', 1, 100), school('2', 0, 40), school('3', None, 20),
+               school('4', 0, None), school('5', 1, None), school('6', None, None),
+               school('7', 0, 10, rede='2', area='2'),
+               school('8', 1, 5, mun='1100015')]
+    rows = aggregate_year(schools, 2024, {'agua_potavel': True})
+    assert len(rows) == 3
+    result = next(r for r in rows if r['rede'] == '3' and r['municipio'] == '1100205')
+    assert result['metrics']['agua_potavel'] == [2, 4]
+    assert infrastructure(result) == {
+        'schools_with': 2, 'schools_without': 2, 'schools_unknown': 2,
+        'enrollments_with': 100, 'enrollments_without': 40,
+        'enrollments_unknown': 20, 'enrollments_valid': 140,
+        'schools_missing_enrollments': 3,
+    }
+    assert result['matriculas_valid'] == 3
+    assert infrastructure(next(r for r in rows if r['rede'] == '2'))['enrollments_without'] == 10
+    assert infrastructure(next(r for r in rows if r['municipio'] == '1100015'))['enrollments_with'] == 5
+
+
+def test_missing_indicator_and_missing_enrollments_are_separate():
+    row = aggregate_year([school('1', 0, 40), school('2', None, None)], 2024, {})[0]
+    assert row['metrics']['agua_potavel'] == [0, 0]
+    assert infrastructure(row)['enrollments_unknown'] == 40
+    assert infrastructure(row)['enrollments_valid'] == 0
+    assert infrastructure(row)['schools_without'] == 0
+    assert infrastructure(row)['schools_missing_enrollments'] == 1
+
+
+def test_duplicate_school_cannot_inflate_aggregates():
+    duplicate = school('1', 0, 40)
+    with pytest.raises(ValueError, match='duplicada'):
+        aggregate_year([duplicate, duplicate], 2024, {'agua_potavel': True})
+
+
+@pytest.mark.parametrize('value,expected', [('', None), ('NA', None), ('-1', None),
+    ('10.05', None), ('1.5', None), ('0', 0), ('0.0', 0), ('100.0', 100)])
+def test_unknown_enrollments_are_not_zero(value, expected):
+    from edu_panorama.etl import num_value
+    assert num_value(value) == expected
+
+
+@pytest.mark.parametrize('year', range(2020, 2025))
+def test_legacy_years_keep_enrollment_totals(tmp_path, year):
+    path = tmp_path / f'censo_{year}.zip'
+    make_zip(path, {f'microdados_ed_basica_{year}.CSV': CSV_2024})
+    schools, availability, _ = load_year(path, year, 'RO', 1)
+    rows = aggregate_year(schools, year, availability)
+    assert sum(infrastructure(r)['enrollments_valid'] for r in rows) == 140
+    assert sum(infrastructure(r)['enrollments_without'] for r in rows) == 40
+    assert sum(infrastructure(r)['enrollments_unknown'] for r in rows) == 20
+
+
+@pytest.mark.parametrize('uf', UFS)
+def test_uf_filter_is_generic(tmp_path, uf):
+    code = str(UFS[uf][0])
+    path = tmp_path / 'censo_2024.zip'
+    csv = ('CO_ENTIDADE;CO_MUNICIPIO;TP_DEPENDENCIA;TP_LOCALIZACAO;IN_AGUA_POTAVEL;QT_MAT_BAS\n'
+           f'1;{code}00001;3;1;0;15\n')
+    make_zip(path, {'microdados_ed_basica_2024.csv': csv})
+    schools, availability, _ = load_year(path, 2024, uf, 1)
+    assert infrastructure(aggregate_year(schools, 2024, availability)[0])['enrollments_without'] == 15
+
+
+def test_2025_repeated_aggregate_rows_are_not_summed(tmp_path):
+    path = tmp_path / 'censo_2025.zip'
+    make_zip(path, {'Tabela_Escola_2025_V2.csv': CSV_2025,
+                    'Tabela_Matricula_2025_V2.csv': MATRICULAS_2025 + '10001|RO|115\n'})
+    schools, availability, _ = load_year(path, 2025, 'RO', 1)
+    assert sum(infrastructure(r)['enrollments_with'] for r in aggregate_year(schools, 2025, availability)) == 140
+
+
+@pytest.mark.parametrize('extra', ['10001|RO|999\n', '10001|RO|\n'])
+def test_2025_conflicting_enrollment_totals_fail(tmp_path, extra):
+    path = tmp_path / 'censo_2025.zip'
+    make_zip(path, {'Tabela_Escola_2025.csv': CSV_2025,
+                    'Tabela_Matricula_2025.csv': MATRICULAS_2025 + extra})
+    with pytest.raises(ValueError, match='divergentes'):
+        load_year(path, 2025, 'RO', 1)
+
+
+def test_2025_missing_enrollment_table_keeps_unknown(tmp_path):
+    path = tmp_path / 'censo_2025.zip'
+    make_zip(path, {'Tabela_Escola_2025.csv': CSV_2025})
+    schools, availability, _ = load_year(path, 2025, 'RO', 1)
+    rows = aggregate_year(schools, 2025, availability)
+    assert all(s['matriculas'] is None for s in schools)
+    assert sum(infrastructure(r)['schools_missing_enrollments'] for r in rows) == 2
+    assert sum(r['matriculas_valid'] for r in rows) == 0
+
+
+def test_unknown_enrollments_with_known_unclassified_total_are_not_zero():
+    row = aggregate_year([school('1', 0, None), school('2', None, 100)],
+                         2025, {'agua_potavel': True})[0]
+    counts = infrastructure(row)
+    assert counts['enrollments_without'] is None
+    assert counts['enrollments_valid'] is None
+    assert counts['enrollments_unknown'] == 100
+    assert counts['schools_missing_enrollments'] == 1
+
+
+@pytest.mark.parametrize('metric', INDICATORS)
+def test_every_binary_indicator_supports_enrollment_perspective(metric):
+    schools = [school('1', None, 100), school('2', None, 20), school('3', None, 40)]
+    for item, answer in zip(schools, (1, 0, None)):
+        item['indicators'] = {metric: answer}
+    row = aggregate_year(schools, 2025, {metric: True})[0]
+    counts = infrastructure(row, metric)
+    assert counts['enrollments_without'] == 20
+    assert counts['enrollments_valid'] == 120
+    assert counts['enrollments_unknown'] == 40
+    assert row['metrics'][metric] == [1, 2]

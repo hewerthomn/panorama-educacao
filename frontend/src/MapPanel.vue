@@ -5,10 +5,10 @@ import {
   colorFor,
   percent,
   mapScale,
-  mapGradient,
+  gradientFor,
   noDataColor,
 } from "./data.js";
-const props = defineProps({ geo: Object, stats: Object, selected: String });
+const props = defineProps({ geo: Object, stats: Object, selected: String, mode: String });
 const emit = defineEmits(["select"]);
 const mapEl = ref(null);
 const basemap = ref(true);
@@ -28,7 +28,7 @@ function update() {
       return {
         color: active ? "#183c50" : "#fff",
         weight: active ? 3 : 1,
-        fillColor: colorFor(props.stats?.[id]?.pct ?? null),
+        fillColor: colorFor(props.stats?.[id]?.pct ?? null, props.mode),
         fillOpacity: 0.88,
       };
     },
@@ -36,8 +36,9 @@ function update() {
       const id = String(f.properties?.id ?? f.id),
         stat = props.stats?.[id];
       const name = f.properties?.name || id;
+      const format = (value) => value == null ? "N/D" : value.toLocaleString("pt-BR");
       poly.bindTooltip(
-        `<strong>${escapeHtml(name)}</strong><br>${percent(stat?.pct ?? null)}<br>${stat?.yes ?? 0} de ${stat?.valid ?? 0} escolas com resposta válida`,
+        `<strong>${escapeHtml(name)}</strong><br>${percent(stat?.pct ?? null)}<br>${format(stat?.yes)} de ${format(stat?.valid)} ${props.mode === 'enrollments' ? 'matrículas em escolas sem o recurso / matrículas válidas' : 'escolas com resposta válida'}`,
       );
       poly.on("click", () => emit("select", id));
       poly.on("mouseover", () =>
@@ -90,7 +91,7 @@ onMounted(() => {
   });
   observer.observe(mapEl.value);
 });
-watch(() => [props.geo, props.stats, props.selected], update);
+watch(() => [props.geo, props.stats, props.selected, props.mode], update);
 onBeforeUnmount(() => {
   observer?.disconnect();
   map?.remove();
@@ -112,12 +113,12 @@ onBeforeUnmount(() => {
     </div>
     <div
       class="map-legend"
-      aria-label="Legenda: percentual de escolas com o indicador"
+      :aria-label="mode === 'enrollments' ? 'Legenda: percentual de matrículas em escolas sem o recurso' : 'Legenda: percentual de escolas com o indicador'"
     >
-      <strong>Escolas com o indicador</strong>
+      <strong>{{ mode === 'enrollments' ? 'Matrículas em escolas sem o recurso' : 'Escolas com o indicador' }}</strong>
       <div
         class="legend-ramp"
-        :style="{ background: mapGradient }"
+        :style="{ background: gradientFor(mode) }"
         aria-hidden="true"
       ></div>
       <div class="legend-values">
@@ -126,7 +127,7 @@ onBeforeUnmount(() => {
       <div class="legend-caption">
         <span
           ><i class="no-data-swatch" :style="{ background: noDataColor }"></i>
-          N/D · sem resposta válida</span
+          N/D · sem dados válidos</span
         ><span>Escala fixa · %</span>
       </div>
     </div>

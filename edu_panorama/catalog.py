@@ -4,6 +4,15 @@ Indicadores são atributos declarados por escola (não por aluno).
 Para preservar a comparabilidade, não inferimos valores não publicados.
 """
 
+SCHEMA_VERSION = 2
+
+# Campos aditivos por indicador; metrics mantém o par histórico [sim, válidas].
+INFRASTRUCTURE_FIELDS = (
+    'schools_with', 'schools_without', 'schools_unknown',
+    'enrollments_with', 'enrollments_without', 'enrollments_unknown',
+    'enrollments_valid', 'schools_missing_enrollments',
+)
+
 UFS = {
     "RO": (11, "Rondônia"), "AC": (12, "Acre"), "AM": (13, "Amazonas"),
     "RR": (14, "Roraima"), "PA": (15, "Pará"), "AP": (16, "Amapá"),

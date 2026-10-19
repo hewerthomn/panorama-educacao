@@ -12,6 +12,7 @@ A apresentação serviu de inspiração para transformar dados públicos sobre a
 
 ## Funcionalidades
 
+- Alternância entre escolas com infraestrutura e matrículas em escolas sem o recurso.
 - Mapa interativo com indicadores por município.
 - Filtros por estado, município, ano, rede de ensino e localização.
 - Evolução histórica dos indicadores.
@@ -63,7 +64,17 @@ python -m edu_panorama generate --uf RO --years 2020:2025
 python -m edu_panorama generate --all --years 2020:2025
 ```
 
-O processamento identifica estados já concluídos e reutiliza os arquivos do Inep que estiverem em cache.
+O processamento reutiliza os ZIPs do Inep em cache e só pula estados com saídas completas
+no esquema atual. Manifestos antigos são identificados pelo `status` e regenerados,
+incluindo todos os indicadores na mesma execução. Para regenerar usando somente ZIPs locais:
+
+```bash
+python -m edu_panorama generate --all --years 2020:2025 --no-download
+```
+
+Para uma UF, use `generate --uf RO --years 2020:2025 --no-download`.
+Para refazer também estados já atualizados, acrescente `--force` ao comando com `--all`.
+O cache dos ZIPs em `data/raw/` não deve ser incluído no Git.
 
 Para verificar quais estados já foram processados:
 
@@ -83,13 +94,61 @@ Acesse o endereço local informado pelo Vite.
 
 ## Como os indicadores são calculados
 
-Os percentuais consideram escolas em atividade com respostas válidas para cada indicador.
+Somente escolas em atividade compõem as duas perspectivas. Cada escola é contada uma
+vez por ano, município, rede e localização, usando os mesmos filtros.
 
-Por exemplo, o percentual de escolas com água potável corresponde à quantidade de escolas que declararam possuir água potável dividida pelo total de escolas com informação válida sobre esse indicador.
+- **Escolas:** escolas que declararam possuir o recurso (`1`) / escolas com resposta
+  válida (`0` ou `1`) × 100. O mapa vai do vermelho (menor presença) ao verde (maior presença).
+- **Matrículas:** matrículas conhecidas em escolas que declararam não possuir o recurso
+  (`0`) / matrículas conhecidas em escolas com resposta válida (`0` ou `1`) × 100.
+  O mapa vai do verde (menor ausência) ao vermelho (maior ausência).
 
-Dados ausentes são identificados separadamente e não são tratados como zero.
+As escalas são fixas de 0% a 100%; denominador zero é **N/D**, em cinza no mapa.
+O número absoluto conhecido é mostrado separadamente, mesmo com percentual N/D.
+Respostas ausentes não significam ausência do recurso. Matrículas desconhecidas não
+são consideradas zero nem entram no denominador: a interface informa o número de
+escolas sem esse total, cuja quantidade de matrículas é desconhecida. Também mostra
+as matrículas conhecidas em escolas sem resposta válida ao indicador.
 
-Como os questionários do Censo Escolar podem mudar ao longo dos anos, comparações históricas devem considerar possíveis alterações nas definições dos indicadores.
+Os donuts em Matrículas mostram a participação no total de matrículas em escolas
+sem o recurso; o tooltip informa a taxa dentro da categoria. Todos os filtros são
+aplicados nesse modo. Em Escolas, cada donut mantém a comparação entre categorias
+da própria dimensão, conforme indicado no gráfico. Os cálculos somam contagens,
+nunca médias de percentuais municipais.
+
+A série anual apresenta percentual e total de matrículas (eixo direito). A comparação
+em pontos percentuais usa o ano anterior disponível, somente quando ambos têm
+percentual válido e cobertura completa de matrículas e respostas ao indicador no
+recorte. Cobertura parcial continua visível, sem comparação automática em p.p.
+
+Usamos `QT_MAT_BAS`: no arquivo de escolas de 2020–2024 e na tabela pública agregada
+por escola `Tabela_Matricula` de 2025, vinculada por `CO_ENTIDADE`. Não são utilizados
+dados individuais de estudantes. Se o campo ou a tabela não estiver disponível, as
+matrículas permanecem desconhecidas. Campos de infraestrutura removidos/ausentes
+não são substituídos por aproximações. O Censo descreve a **condição declarada da
+unidade escolar**, sem demonstrar que cada estudante ficou diretamente sem acesso
+ao serviço. Matrículas tampouco equivalem necessariamente a pessoas únicas.
+Comparações históricas também dependem da estabilidade das definições do Censo.
+
+O JSON usa o **esquema 2**, preservando os campos existentes. Os novos agregados
+ficam em `infrastructure[indicador]`, na ordem de `infrastructure_fields` do manifesto.
+Uma classe com escolas, mas sem matrículas conhecidas, recebe `null`; uma classe sem
+escolas recebe zero. `matriculas_valid` continua contando escolas com matrícula informada.
+
+## Testes do processamento e dos indicadores
+
+```bash
+pip install -e '.[test]'
+python -m pytest -q
+cd frontend
+npm test
+npm run build
+```
+
+Fixtures pequenas cobrem respostas 0/1/nulas, matrículas ausentes, denominador zero,
+agregações, duplicidades, as 27 UFs, o layout separado de 2025 e a detecção de
+manifestos antigos. Os testes de navegador também verificam a alternância de
+perspectiva, os filtros, os dados dos gráficos, as cores do mapa e a reprodução temporal.
 
 ## Testes dos filtros pesquisáveis
 

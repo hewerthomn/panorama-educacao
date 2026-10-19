@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import tomllib
 from datetime import datetime, timezone
-from .catalog import UFS, INDICATORS
+from .catalog import UFS, INDICATORS, SCHEMA_VERSION, INFRASTRUCTURE_FIELDS
 from .etl import load_year, aggregate_year
 from .geo import geojson_for_uf, municipality_names
 from .sources import locate_zip
@@ -54,8 +54,10 @@ def state_status(uf: str, years: list[int], output_dir: Path, *,
         manifest = json.loads(path.read_text(encoding='utf-8'))
     except (OSError, ValueError) as exc:
         return False, f'manifest.json inválido ({type(exc).__name__})'
-    if manifest.get('uf') != uf or manifest.get('schema_version') != 1:
-        return False, 'manifest.json incompatível'
+    if manifest.get('uf') != uf or manifest.get('schema_version') != SCHEMA_VERSION:
+        return False, 'manifest.json incompatível; regenerar agregados de matrículas'
+    if manifest.get('infrastructure_fields') != list(INFRASTRUCTURE_FIELDS):
+        return False, 'campos de infraestrutura incompatíveis; regenerar'
     available = set(manifest.get('years', []))
     missing_years = sorted(set(years) - available)
     if missing_years:
@@ -65,11 +67,21 @@ def state_status(uf: str, years: list[int], output_dir: Path, *,
     if missing_sources:
         return False, 'sem metadados de origem: ' + ', '.join(map(str, missing_sources))
     records = manifest.get('records')
-    if not isinstance(records, list):
+    if not isinstance(records, list) or any(not isinstance(row, dict) for row in records):
         return False, 'registros ausentes'
     years_with_records = {row.get('year') for row in records if isinstance(row, dict)}
     if set(years) - years_with_records:
         return False, 'agregados incompletos'
+    for row in records:
+        if row.get('year') not in years:
+            continue
+        for metric in INDICATORS:
+            counts = row.get('infrastructure', {}).get(metric, [])
+            if not isinstance(counts, list) or len(counts) != len(INFRASTRUCTURE_FIELDS) or any(
+                    not (value is None and field.startswith('enrollments_')) and
+                    (not isinstance(value, int) or value < 0)
+                    for field, value in zip(INFRASTRUCTURE_FIELDS, counts)):
+                return False, 'agregados de matrículas incompletos; regenerar'
     if include_schools:
         if not manifest.get('schools_available'):
             return False, 'arquivos individuais de escolas indisponíveis'
@@ -217,7 +229,8 @@ def generate(args, cfg, config_path):
         (uf_dir / 'municipios.geojson').unlink(missing_ok=True)
 
     manifest = {
-        'schema_version': 1,
+        'schema_version': SCHEMA_VERSION,
+        'infrastructure_fields': list(INFRASTRUCTURE_FIELDS),
         'uf': uf, 'state_name': UFS[uf][1], 'years': years,
         'generated_at': datetime.now(timezone.utc).isoformat(),
         'sources': {'inep': 'https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados/censo-escolar',
@@ -225,7 +238,10 @@ def generate(args, cfg, config_path):
         'notes': ['Somente escolas em atividade (TP_SITUACAO_FUNCIONAMENTO=1), quando disponível.',
                   'Numerador: escolas com valor 1; denominador: escolas com valor 0 ou 1.',
                   'Indicadores ausentes/sem respostas válidas são N/D, nunca zero.',
-                  'Agregação por escola, não ponderada por matrícula.',
+                  'Escolas: proporção com o recurso entre respostas 0 ou 1.',
+                  'Matrículas: total conhecido em escolas com resposta 0 / total conhecido com resposta 0 ou 1.',
+                  'Matrículas desconhecidas não equivalem a zero; cobertura informada separadamente.',
+                  'Condição declarada da unidade escolar; não mede acesso individual dos estudantes.',
                   'A malha territorial corresponde à consulta IBGE no momento da geração.'],
         'municipalities': [{'id': k, 'name': v} for k, v in sorted(names.items()) if k.startswith(str(UFS[uf][0]))],
         'indicators': [{'key': key, 'label': label, 'category': category, 'field': aliases[0],

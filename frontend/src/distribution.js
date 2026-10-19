@@ -16,7 +16,7 @@ export const distributionDimensions = {
 
 export function distributionFor(
   data,
-  { dimension, year, metric, city = "all", rede = "all", area = "all" },
+  { dimension, year, metric, city = "all", rede = "all", area = "all", mode = "schools" },
 ) {
   const definitions = distributionDimensions[dimension];
   if (!definitions)
@@ -25,8 +25,8 @@ export function distributionFor(
   const rows = subset(
     data,
     year,
-    dimension === "rede" ? "all" : rede,
-    dimension === "localizacao" ? "all" : area,
+    dimension === "rede" && mode === "schools" ? "all" : rede,
+    dimension === "localizacao" && mode === "schools" ? "all" : area,
     city,
   );
   const groups = new Map(definitions.map((category) => [category.id, []]));
@@ -36,7 +36,7 @@ export function distributionFor(
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
   }
-  const total = compute(rows, metric);
+  const total = compute(rows, metric, mode);
   const categories = [...definitions];
   if (groups.has("unclassified"))
     categories.push({
@@ -47,11 +47,14 @@ export function distributionFor(
   return {
     total,
     categories: categories.map((category) => {
-      const counts = compute(groups.get(category.id), metric);
+      const categoryRows = groups.get(category.id) || [];
+      const counts = compute(categoryRows, metric, mode);
+      // Uma categoria vazia tem contagem zero se o total dispõe de matrículas.
+      if (!categoryRows.length && total.enrollmentKnown && mode === "enrollments") counts.yes = 0;
       return {
         ...category,
         ...counts,
-        share: total.yes > 0 ? (counts.yes / total.yes) * 100 : null,
+        share: total.yes > 0 && counts.yes !== null ? (counts.yes / total.yes) * 100 : null,
       };
     }),
   };

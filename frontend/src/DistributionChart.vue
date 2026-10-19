@@ -11,10 +11,13 @@ const canvas = ref(null),
   active = ref(null),
   hovering = ref(false);
 let chart;
-const format = (value) => new Intl.NumberFormat("pt-BR").format(value);
+const enrollmentMode = computed(() => props.distribution.total.mode === "enrollments");
+const unit = computed(() => enrollmentMode.value ? "matrículas em escolas sem o recurso" : "escolas com o indicador");
+const rateLabel = computed(() => enrollmentMode.value ? "Taxa sem o recurso na categoria" : "Taxa de atendimento");
+const format = (value) => value === null ? "N/D" : new Intl.NumberFormat("pt-BR").format(value);
 const hasData = computed(() => props.distribution.total.yes > 0);
 const totalLabel = computed(() =>
-  props.distribution.total.valid > 0
+  (enrollmentMode.value ? props.distribution.total.enrollmentKnown : props.distribution.total.valid > 0)
     ? format(props.distribution.total.yes)
     : "N/D",
 );
@@ -26,16 +29,18 @@ const activeCategory = computed(() =>
 const emptyMessage = computed(() =>
   props.distribution.total.schools === 0
     ? "Nenhuma escola neste recorte."
+    : enrollmentMode.value && (!props.distribution.total.enrollmentKnown || props.distribution.total.yes === null)
+      ? "Quantidade de matrículas indisponível para esta classificação."
     : props.distribution.total.valid === 0
       ? "Sem respostas válidas para este indicador."
-      : "Nenhuma escola atende ao indicador neste recorte.",
+      : (enrollmentMode.value ? "Nenhuma matrícula conhecida em escola sem o recurso neste recorte." : "Nenhuma escola atende ao indicador neste recorte."),
 );
 function details(category) {
-  return `${category.label}: ${format(category.yes)} escolas com o indicador; participação: ${percent(category.share)}; taxa de atendimento: ${percent(category.pct)} (${format(category.yes)} de ${format(category.valid)} respostas válidas).`;
+  return `${category.label}: ${format(category.yes)} ${unit.value}; participação: ${percent(category.share)}; ${rateLabel.value}: ${percent(category.pct)} (${format(category.yes)} de ${format(category.valid)} respostas válidas).`;
 }
 function showCategory(category, index) {
   active.value = category.id;
-  if (!chart || !hasData.value || category.yes === 0) return;
+  if (!chart || !hasData.value || !(category.yes > 0)) return;
   const arc = chart.getDatasetMeta(0).data[index];
   chart.setActiveElements([{ datasetIndex: 0, index }]);
   chart.tooltip.setActiveElements(
@@ -95,10 +100,10 @@ function draw() {
             label: (context) => {
               const category = categories[context.dataIndex];
               return [
-                `${format(category.yes)} escolas com o indicador`,
+                `${format(category.yes)} ${unit.value}`,
                 `Participação no total: ${percent(category.share)}`,
-                `Taxa de atendimento: ${percent(category.pct)}`,
-                `${format(category.valid)} respostas válidas`,
+                `${rateLabel.value}: ${percent(category.pct)}`,
+                `${format(category.valid)} ${enrollmentMode.value ? "matrículas válidas" : "respostas válidas"}`,
               ];
             },
           },
@@ -119,7 +124,7 @@ onBeforeUnmount(() => chart?.destroy());
       <canvas
         ref="canvas"
         role="img"
-        :aria-label="`${title}. ${totalLabel} escolas com o indicador. Quantidades e participações na legenda a seguir.`"
+        :aria-label="`${title}. ${totalLabel} ${unit}. Quantidades e participações na legenda a seguir.`"
       ></canvas>
       <div
         class="donut-total"
@@ -127,7 +132,7 @@ onBeforeUnmount(() => chart?.destroy());
         aria-hidden="true"
       >
         <strong>{{ totalLabel }}</strong
-        ><span>escolas com<br />o indicador</span>
+        ><span>{{ unit }}</span>
       </div>
     </div>
     <p v-if="!hasData" class="distribution-empty" role="status">
@@ -138,7 +143,7 @@ onBeforeUnmount(() => chart?.destroy());
       :aria-label="`Valores de ${title.toLowerCase()}`"
     >
       <div class="distribution-columns" aria-hidden="true">
-        <span>Categoria</span><span>Escolas</span><span>Participação</span>
+        <span>Categoria</span><span>{{ enrollmentMode ? "Matrículas" : "Escolas" }}</span><span>Participação</span>
       </div>
       <ul>
         <li
@@ -163,19 +168,21 @@ onBeforeUnmount(() => chart?.destroy());
     </div>
     <div class="distribution-detail" aria-live="polite">
       <p v-if="activeCategory">
-        <strong>{{ activeCategory.label }}</strong> · Taxa de atendimento:
+        <strong>{{ activeCategory.label }}</strong> · {{ rateLabel }}:
         {{ percent(activeCategory.pct) }}<br />{{
           format(activeCategory.yes)
         }}
-        de {{ format(activeCategory.valid) }} respostas válidas<span
+        de {{ format(activeCategory.valid) }} {{ enrollmentMode ? "matrículas válidas" : "respostas válidas" }}<span
           v-if="activeCategory.unknown"
         >
           · {{ format(activeCategory.unknown) }} sem resposta válida</span
         ><span v-if="!activeCategory.schools"> · Sem registros</span>.
+        <span v-if="enrollmentMode && activeCategory.missingEnrollmentSchools">
+          {{ format(activeCategory.missingEnrollmentSchools) }} escolas sem matrícula informada.
+        </span>
       </p>
       <p v-else>
-        Participação entre as escolas com o indicador. Selecione uma categoria
-        para consultar sua taxa de atendimento.
+        Participação entre {{ unit }}. Selecione uma categoria para consultar sua taxa.
       </p>
     </div>
   </div>

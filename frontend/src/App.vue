@@ -19,6 +19,7 @@ import {
   percent,
   colorFor,
   exportCsv,
+  previousComparison,
 } from "./data.js";
 
 const stateOptions = ref([]);
@@ -27,6 +28,9 @@ const manifest = ref(null);
 const geo = ref(null);
 const year = ref(null);
 const metric = ref("agua_potavel");
+const mode = ref("schools");
+const enrollmentMode = computed(() => mode.value === "enrollments");
+const measureLabel = computed(() => enrollmentMode.value ? "Matrículas em escolas sem o recurso" : "Escolas com o indicador");
 const city = ref("all");
 const rede = ref("all");
 const area = ref("all");
@@ -101,12 +105,9 @@ const indicatorSelectOptions = computed(() =>
   indicators.value.map((i) => ({ value: i.key, label: i.label })),
 );
 const comparison = computed(() => {
-  const previous = trend.value
-    .filter((p) => p.year < year.value && p.pct !== null)
-    .at(-1);
-  if (!previous || current.value.pct === null) return null;
-  const delta = current.value.pct - previous.pct;
-  return `${delta > 0 ? "+" : ""}${delta.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} p.p. em relação a ${previous.year}`;
+  const change = previousComparison(trend.value, year.value, mode.value);
+  if (!change) return null;
+  return `${change.delta > 0 ? "+" : ""}${change.delta.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} p.p. em relação a ${change.year}`;
 });
 const years = computed(() =>
   [...(manifest.value?.years || [])].sort((a, b) => a - b),
@@ -154,7 +155,7 @@ onBeforeUnmount(() => {
   pause();
   document.removeEventListener("visibilitychange", visibilityChanged);
 });
-watch([metric, city, rede, area], pause);
+watch([metric, city, rede, area, mode], pause);
 
 let loadId = 0;
 let schoolLoadId = 0;
@@ -223,7 +224,7 @@ const selectedCity = computed(() =>
 const rows = computed(() =>
   subset(manifest.value, year.value, rede.value, area.value, city.value),
 );
-const current = computed(() => compute(rows.value, metric.value));
+const current = computed(() => compute(rows.value, metric.value, mode.value));
 const missingYear = computed(
   () =>
     selectedIndicator.value &&
@@ -241,6 +242,7 @@ const byMunicipality = computed(() => {
         municipality.id,
       ),
       metric.value,
+      mode.value,
     );
   }
   return result;
@@ -251,11 +253,13 @@ const trend = computed(() =>
     ...compute(
       subset(manifest.value, y, rede.value, area.value, city.value),
       metric.value,
+      mode.value,
     ),
   })),
 );
 const networkDistribution = computed(() =>
   distributionFor(manifest.value, {
+    mode: mode.value,
     dimension: "rede",
     year: year.value,
     metric: metric.value,
@@ -266,6 +270,7 @@ const networkDistribution = computed(() =>
 );
 const locationDistribution = computed(() =>
   distributionFor(manifest.value, {
+    mode: mode.value,
     dimension: "localizacao",
     year: year.value,
     metric: metric.value,
@@ -276,14 +281,15 @@ const locationDistribution = computed(() =>
 );
 const networkScope = computed(
   () =>
-    `Todas as redes · ${area.value === "all" ? "urbana e rural" : area.value === "1" ? "urbana" : "rural"}${rede.value !== "all" ? ". O filtro de rede não se aplica a este gráfico." : ""}`,
+    `${enrollmentMode.value ? "Todos os filtros aplicados" : "Todas as redes"} · ${area.value === "all" ? "urbana e rural" : area.value === "1" ? "urbana" : "rural"}${!enrollmentMode.value && rede.value !== "all" ? ". O filtro de rede não se aplica a este gráfico." : ""}`,
 );
 const locationScope = computed(
   () =>
-    `Urbana e rural · ${{ all: "todas as redes", 1: "rede federal", 2: "rede estadual", 3: "rede municipal", 4: "rede privada" }[rede.value]}${area.value !== "all" ? ". O filtro de localização não se aplica a este gráfico." : ""}`,
+    `${enrollmentMode.value ? "Todos os filtros aplicados" : "Urbana e rural"} · ${{ all: "todas as redes", 1: "rede federal", 2: "rede estadual", 3: "rede municipal", 4: "rede privada" }[rede.value]}${!enrollmentMode.value && area.value !== "all" ? ". O filtro de localização não se aplica a este gráfico." : ""}`,
 );
 const ranking = computed(() =>
   municipalities.value
+    .filter((m) => !enrollmentMode.value || city.value === "all" || city.value === m.id)
     .map((m) => ({ ...m, ...byMunicipality.value[m.id] }))
     .filter((m) => m.pct !== null && m.valid > 0)
     .sort((a, b) => b.pct - a.pct || a.name.localeCompare(b.name, "pt-BR")),
@@ -329,19 +335,24 @@ function csvDownload() {
         municipio: names[m.id],
         ano: year.value,
         indicador: metric.value,
-        escolas_com: s.yes,
-        escolas_validas: s.valid,
+        escolas_com: compute(subset(manifest.value, year.value, rede.value, area.value, m.id), metric.value).yes,
+        escolas_validas: compute(subset(manifest.value, year.value, rede.value, area.value, m.id), metric.value).valid,
+        perspectiva: mode.value,
+        matriculas_sem_recurso: enrollmentMode.value ? s.yes : "",
+        matriculas_validas: enrollmentMode.value ? s.valid : "",
+        matriculas_sem_resposta_valida: enrollmentMode.value ? s.unknown : "",
+        escolas_sem_matriculas: s.missingEnrollmentSchools,
         total_escolas: s.schools,
         percentual: s.pct === null ? "" : s.pct.toFixed(2).replace(".", ","),
       };
     });
-  exportCsv(`educacao_${uf.value}_${year.value}_${metric.value}.csv`, data);
+  exportCsv(`educacao_${uf.value}_${year.value}_${metric.value}_${mode.value}.csv`, data);
 }
 function schoolAnswer(value) {
   return value === 1 ? "Sim" : value === 0 ? "Não" : "N/D";
 }
 function withSeparators(v) {
-  return new Intl.NumberFormat("pt-BR").format(v);
+  return v === null || v === undefined ? "N/D" : new Intl.NumberFormat("pt-BR").format(v);
 }
 </script>
 
@@ -523,6 +534,26 @@ function withSeparators(v) {
               >Referência <strong>{{ year }}</strong></span
             >
           </section>
+          <div class="perspective-row">
+            <h2>{{ selectedIndicator?.label }}</h2>
+            <div class="perspective-control" role="group" aria-label="Perspectiva do indicador">
+              <button type="button" :aria-pressed="!enrollmentMode" @click="mode = 'schools'">Escolas</button>
+              <button type="button" :aria-pressed="enrollmentMode" @click="mode = 'enrollments'">Matrículas</button>
+            </div>
+          </div>
+          <p v-if="enrollmentMode" class="perspective-note">
+            Matrículas vinculadas a escolas que declararam não possuir o recurso.
+            A declaração descreve a unidade escolar; não mede o acesso individual dos estudantes.
+          </p>
+          <p v-if="enrollmentMode && !current.schools" class="message">
+            Nenhuma escola neste recorte.
+          </p>
+          <p v-else-if="enrollmentMode && !current.enrollmentData" class="message warning">
+            Agregados de matrículas indisponíveis neste recorte. Regenere os dados desta UF com o esquema atual.
+          </p>
+          <p v-else-if="enrollmentMode && !current.enrollmentKnown" class="message warning">
+            Quantidade de matrículas indisponível neste recorte/ano. Valores desconhecidos não são considerados zero.
+          </p>
           <p v-if="missingYear" class="message warning">
             O campo <strong>{{ selectedIndicator?.field }}</strong> não está
             disponível em {{ year }}. O indicador é exibido como N/D, sem
@@ -530,39 +561,38 @@ function withSeparators(v) {
           </p>
           <section class="kpis" aria-label="Resumo do recorte">
             <div class="kpi primary">
-              <span>{{ selectedIndicator?.label }}</span
-              ><strong>{{ percent(current.pct) }}</strong
-              ><small>{{
-                comparison || "Das escolas com resposta válida"
-              }}</small>
+              <span>{{ enrollmentMode ? "Matrículas em escolas sem o recurso (%)" : selectedIndicator?.label }}</span>
+              <strong>{{ percent(current.pct) }}</strong>
+              <small>{{ comparison || (enrollmentMode ? "Entre matrículas conhecidas com resposta válida" : "Das escolas com resposta válida") }}</small>
             </div>
             <div class="kpi">
-              <span>Escolas com o indicador</span
-              ><strong>{{
-                current.valid ? withSeparators(current.yes) : "N/D"
-              }}</strong
-              ><small
-                >De {{ withSeparators(current.valid) }} respostas válidas</small
-              >
+              <span>{{ measureLabel }}</span>
+              <strong>{{ enrollmentMode || current.valid ? withSeparators(current.yes) : "N/D" }}</strong>
+              <small>{{ enrollmentMode ? "Total conhecido nessa condição" : `De ${withSeparators(current.valid)} respostas válidas` }}</small>
             </div>
             <div class="kpi">
-              <span>Escolas ativas</span
-              ><strong>{{ withSeparators(current.schools) }}</strong
-              ><small>No recorte selecionado</small>
+              <span>{{ enrollmentMode ? "Matrículas consideradas no cálculo" : "Escolas ativas" }}</span>
+              <strong>{{ withSeparators(enrollmentMode ? (current.enrollmentKnown ? current.valid : null) : current.schools) }}</strong>
+              <small>{{ enrollmentMode ? "Matrículas conhecidas e indicador com resposta 0 ou 1" : "No recorte selecionado" }}</small>
             </div>
             <div class="kpi">
-              <span>Sem resposta válida</span
-              ><strong>{{ withSeparators(current.unknown) }}</strong
-              ><small>Ausência de dados, não valor zero</small>
+              <span>{{ enrollmentMode ? "Matrículas sem classificação" : "Sem resposta válida" }}</span>
+              <strong>{{ withSeparators(current.unknown) }}</strong>
+              <small>{{ enrollmentMode ? "Total conhecido em escolas sem resposta válida" : "Ausência de dados, não valor zero" }}</small>
             </div>
           </section>
+          <p v-if="enrollmentMode" class="coverage-note">
+            Cobertura: {{ withSeparators(current.studentSchools) }} de {{ withSeparators(current.schools) }} escolas com matrículas informadas.
+            Escolas sem informação de matrícula: {{ withSeparators(current.missingEnrollmentSchools) }} (quantidade de matrículas desconhecida).
+            Escolas sem resposta válida ao indicador: {{ withSeparators(current.schoolsUnknown) }}.
+            Percentual N/D quando o denominador é zero. A comparação em p.p. exige cobertura completa nos dois anos consecutivos disponíveis.
+          </p>
           <section class="panel map-panel" aria-labelledby="map-heading">
             <div class="panel-head">
               <div>
                 <h2 id="map-heading">Distribuição territorial</h2>
                 <p>
-                  {{ selectedIndicator?.label }} · percentual de escolas por
-                  município
+                  {{ selectedIndicator?.label }} · {{ enrollmentMode ? "percentual de matrículas em escolas sem o recurso" : "percentual de escolas com o recurso" }} por município
                 </p>
               </div>
               <span class="map-scope">{{ uf }} / {{ year }}</span>
@@ -572,6 +602,7 @@ function withSeparators(v) {
               :geo="geo"
               :stats="byMunicipality"
               :selected="city"
+              :mode="mode"
               @select="selectCity"
             />
             <div v-else class="map-missing">
@@ -631,9 +662,9 @@ function withSeparators(v) {
               <div class="historical-chart">
                 <h3>Série anual</h3>
                 <p class="historical-scope">
-                  Cobertura do indicador · todos os filtros aplicados
+                  {{ enrollmentMode ? "Matrículas em escolas sem o recurso · % e total" : "Cobertura do indicador" }} · todos os filtros aplicados
                 </p>
-                <TrendChart :series="trend" :year="year" />
+                <TrendChart :series="trend" :year="year" :mode="mode" />
                 <details class="series-details">
                   <summary>Consultar valores por ano</summary>
                   <div class="table-wrap">
@@ -644,15 +675,15 @@ function withSeparators(v) {
                       <thead>
                         <tr>
                           <th scope="col">Ano</th>
-                          <th scope="col">Cobertura</th>
-                          <th scope="col">Com indicador / válidas</th>
+                          <th scope="col">{{ enrollmentMode ? "Sem recurso (%)" : "Cobertura" }}</th>
+                          <th scope="col">{{ enrollmentMode ? "Matrículas sem recurso / válidas" : "Com indicador / válidas" }}</th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr v-for="point in trend" :key="point.year">
                           <th scope="row">{{ point.year }}</th>
                           <td>{{ percent(point.pct) }}</td>
-                          <td>{{ point.yes }} / {{ point.valid }}</td>
+                          <td>{{ withSeparators(point.yes) }} / {{ withSeparators(point.enrollmentKnown || !enrollmentMode ? point.valid : null) }}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -675,8 +706,7 @@ function withSeparators(v) {
               <div>
                 <h2>Municípios em destaque</h2>
                 <p>
-                  Ordenação pelo percentual do indicador, apenas com respostas
-                  válidas.
+                  {{ enrollmentMode ? "Maiores percentuais de matrículas em escolas sem o recurso, entre matrículas válidas." : "Ordenação pelo percentual do indicador, apenas com respostas válidas." }}
                 </p>
               </div>
               <small>{{ ranking.length }} com dados</small>
@@ -686,8 +716,8 @@ function withSeparators(v) {
                 <thead>
                   <tr>
                     <th scope="col">Município</th>
-                    <th scope="col">Escolas c/ indicador</th>
-                    <th scope="col">Respostas válidas</th>
+                    <th scope="col">{{ enrollmentMode ? "Matrículas sem recurso" : "Escolas c/ indicador" }}</th>
+                    <th scope="col">{{ enrollmentMode ? "Matrículas válidas" : "Respostas válidas" }}</th>
                     <th scope="col">Percentual</th>
                   </tr>
                 </thead>
@@ -706,14 +736,14 @@ function withSeparators(v) {
                         {{ m.name }}
                       </button>
                     </th>
-                    <td>{{ m.yes }}</td>
-                    <td>{{ m.valid }}</td>
+                    <td>{{ withSeparators(m.yes) }}</td>
+                    <td>{{ withSeparators(m.valid) }}</td>
                     <td>
                       <span class="bar"
                         ><i
                           :style="{
                             width: m.pct + '%',
-                            background: colorFor(m.pct),
+                            background: colorFor(m.pct, mode),
                           }"
                         ></i></span
                       >{{ percent(m.pct) }}
@@ -794,8 +824,7 @@ function withSeparators(v) {
               }}</span
             >
             <p>
-              Proporções calculadas sobre escolas com respostas 0 ou 1, sem
-              ponderação por matrícula. Comparações entre anos exigem verificar
+              {{ enrollmentMode ? "Proporções entre matrículas conhecidas em escolas com respostas 0 ou 1." : "Proporções calculadas sobre escolas com respostas 0 ou 1, sem ponderação por matrícula." }} Comparações entre anos exigem verificar
               as alterações dos dicionários oficiais.
             </p>
             <div class="footer-project-links">

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Panorama da Educação</title></head>
+  <body><div id="app"></div>
+    <script type="module">
+      import { createApp } from 'vue';
+      import Chart from 'chart.js/auto';
+      import L from 'leaflet';
+      import App from '/src/App.vue';
+      import '/src/style.css';
+      import 'leaflet/dist/leaflet.css';
+      // Observação de integrações reais somente no harness de teste.
+      const geoJSON = L.geoJSON;
+      L.geoJSON = (...args) => (window.mapLayer = geoJSON(...args));
+      window.chartSnapshots = () => Object.values(Chart.instances).map(chart => ({
+        type: chart.config.type,
+        labels: [...chart.data.labels],
+        datasets: chart.data.datasets.map(({ label, data, yAxisID }, index) => ({ label, data: [...data], yAxisID: chart.getDatasetMeta(index).yScale?.id })),
+        min: chart.options.scales.y?.min,
+        max: chart.options.scales.y?.max,
+      }));
+      createApp(App).mount('#app');
+    </script>
+  </body>
+</html>

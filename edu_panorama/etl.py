@@ -3,7 +3,7 @@ from collections import defaultdict
 from pathlib import Path
 from zipfile import ZipFile
 import pandas as pd
-from .catalog import INDICATORS, ALIASES, LOCAL_NAMES, REDE_NAMES, UFS
+from .catalog import INDICATORS, ALIASES, LOCAL_NAMES, REDE_NAMES, UFS, INFRASTRUCTURE_FIELDS
 
 
 def find_school_member(zf: ZipFile, year: int) -> str:
@@ -55,7 +55,8 @@ def iter_chunks(zf: ZipFile, member: str, columns: list[str], opts: dict, chunks
 
 
 def clean_num(value) -> str:
-    return str(value).strip().replace('.0', '')
+    value = str(value).strip()
+    return value[:-2] if value.endswith('.0') else value
 
 
 def norm_municipio(value) -> str:
@@ -97,13 +98,12 @@ def enrollments_by_school(zf: ZipFile, member: str | None, uf: str, chunksize: i
             chunk = chunk[chunk[municipio].str.startswith(uf_code)]
         for _, row in chunk.iterrows():
             count = num_value(row[mats])
-            if count is not None:
-                # No layout 2025, esta é uma tabela com total por escola.
-                # Duplicidade de código não deve ser somada sem validação.
-                key = clean_num(row[code])
-                if key in out and out[key] != count:
-                    raise ValueError(f'Matrículas com valores divergentes para escola {key}')
-                out[key] = count
+            # No layout 2025, esta é uma tabela com total por escola.
+            # Duplicidade não é somada, inclusive se um dos valores for ausente.
+            key = clean_num(row[code])
+            if key in out and out[key] != count:
+                raise ValueError(f'Matrículas com valores divergentes para escola {key}')
+            out[key] = count
     return out
 
 
@@ -162,21 +162,51 @@ def load_year(zip_file: Path, year: int, uf: str, chunksize: int):
 def aggregate_year(schools: list[dict], year: int, availability: dict) -> list[dict]:
     # Soma numeradores/denominadores válidos; nulos não são tratados como 'não'.
     groups = defaultdict(lambda: {'schools': 0, 'matriculas': 0, 'matriculas_valid': 0,
-                                  'metrics': {k: [0, 0] for k in INDICATORS}})
+                                  'metrics': {k: [0, 0] for k in INDICATORS},
+                                  'known_enrollments': {k: set() for k in INDICATORS},
+                                  'infrastructure': {k: dict.fromkeys(INFRASTRUCTURE_FIELDS, 0)
+                                                     for k in INDICATORS}})
+    seen = set()
     for school in schools:
+        if school['id'] in seen:
+            raise ValueError(f'{year}: escola duplicada {school["id"]} na agregação')
+        seen.add(school['id'])
         key = (school['municipio'], school['rede'], school['localizacao'])
         group = groups[key]
         group['schools'] += 1
         if school['matriculas'] is not None:
             group['matriculas'] += school['matriculas']
             group['matriculas_valid'] += 1
-        for metric, answer in school['indicators'].items():
-            if availability[metric] and answer is not None:
+        for metric in INDICATORS:
+            answer = school['indicators'].get(metric) if availability.get(metric) else None
+            answer = answer if answer in (0, 1) else None
+            counts = group['infrastructure'][metric]
+            classification = 'with' if answer == 1 else 'without' if answer == 0 else 'unknown'
+            counts[f'schools_{classification}'] += 1
+            if school['matriculas'] is None:
+                counts['schools_missing_enrollments'] += 1
+            else:
+                group['known_enrollments'][metric].add(classification)
+                counts[f'enrollments_{classification}'] += school['matriculas']
+                if answer is not None:
+                    counts['enrollments_valid'] += school['matriculas']
+            if answer is not None:
                 group['metrics'][metric][0] += answer
                 group['metrics'][metric][1] += 1
+    for group in groups.values():
+        for metric, counts in group['infrastructure'].items():
+            known = group['known_enrollments'][metric]
+            for classification in ('with', 'without', 'unknown'):
+                if counts[f'schools_{classification}'] and classification not in known:
+                    counts[f'enrollments_{classification}'] = None
+            if counts['schools_with'] + counts['schools_without'] and not known.intersection({'with', 'without'}):
+                counts['enrollments_valid'] = None
     return [
         {'year': year, 'municipio': mun, 'rede': rede, 'localizacao': loc,
          'schools': group['schools'], 'matriculas': group['matriculas'],
-         'matriculas_valid': group['matriculas_valid'], 'metrics': group['metrics']}
+         'matriculas_valid': group['matriculas_valid'], 'metrics': group['metrics'],
+         # Mesmo padrão compacto de metrics, com ordem publicada no manifesto.
+         'infrastructure': {metric: [counts[field] for field in INFRASTRUCTURE_FIELDS]
+                            for metric, counts in group['infrastructure'].items()}}
         for (mun, rede, loc), group in sorted(groups.items())
     ]

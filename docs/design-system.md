@@ -119,3 +119,14 @@ em três e duas colunas; filtros de lista e seletores de período fluem no mobil
 Comparações e índices ficam em um Web Worker por UF. A tela limpa os resultados
 ao alterar filtros e descarta respostas obsoletas. Só totais, páginas de 50 escolas
 e o histórico individual cruzam para a interface; nenhuma dependência foi adicionada.
+
+## Desempenho educacional
+
+A terceira opção do controle de análise carrega `IdebPanel` sob demanda. Os filtros
+pesquisáveis de UF/município e o drawer são reutilizados. Etapa, edição e rede publicada
+substituem os filtros de infraestrutura; a lateral explica a ausência de localização.
+A hierarquia permanece faixa de indicadores, mapa, reprodução por edição, histórico,
+ranking e consulta escolar. `IdebChart` usa eixo 0–10, sem curvas ou lacunas preenchidas,
+e tem tabela textual. `idebScale` e `idebColor` compartilham a legenda e a coroplética:
+vermelho em 0, âmbar em 5, verde em 10 e cinza para N/D. A escala não muda por recorte.
+Nenhum percentual ou média de escolas representa a nota territorial.

@@ -257,9 +257,15 @@ def generate(args, cfg, config_path):
 
 
 def main(argv=None):
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if 'ideb' in arguments:
+        from .ideb.cli import main as ideb_main
+        position = arguments.index('ideb')
+        return ideb_main(arguments[:position] + arguments[position + 1:])
     parser = argparse.ArgumentParser(description='Gerar dados estáticos do panorama de educação.')
     parser.add_argument('--config', default=str(ROOT / 'config.toml'), help='Caminho para config.toml')
     sub = parser.add_subparsers(dest='command', required=True)
+    sub.add_parser('ideb', help='Importar resultados oficiais do Ideb (generate/status), independentemente do Censo')
     build = sub.add_parser('generate', help='Processar os ZIPs oficiais do Inep por UF ou em lote')
     build.add_argument('--uf', help='Sigla da UF, ex.: RO, SP, AM')
     build.add_argument('--all', action='store_true', help='Percorrer todas as 27 UFs, pulando as já completas')

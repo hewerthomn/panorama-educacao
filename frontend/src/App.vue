@@ -23,6 +23,9 @@ import {
   previousComparison,
 } from "./data.js";
 
+const IdebPanel = defineAsyncComponent(() => import("./IdebPanel.vue"));
+const idebTerritory = ref(null);
+const idebStates = ref([]);
 const LongitudinalPanel = defineAsyncComponent(() => import("./LongitudinalPanel.vue"));
 
 const stateOptions = ref([]);
@@ -32,7 +35,7 @@ const geo = ref(null);
 const year = ref(null);
 const metric = ref("agua_potavel");
 const mode = ref("schools");
-const analysisMode = ref("aggregate");
+const analysisMode = ref(new URLSearchParams(location.search).get("analysis") === "ideb" ? "ideb" : "aggregate");
 const enrollmentMode = computed(() => mode.value === "enrollments");
 const measureLabel = computed(() => enrollmentMode.value ? "Matrículas em escolas sem o recurso" : "Escolas com o indicador");
 const city = ref("all");
@@ -96,7 +99,7 @@ onBeforeUnmount(() => {
   document.body.style.overflow = "";
 });
 const stateSelectOptions = computed(() =>
-  stateOptions.value.map((s) => ({
+  [...new Map([...stateOptions.value, ...(analysisMode.value === "ideb" ? idebStates.value : [])].map(s => [s.uf, s])).values()].map((s) => ({
     value: s.uf,
     label: `${s.name} (${s.uf})`,
   })),
@@ -166,17 +169,22 @@ let schoolLoadId = 0;
 
 onMounted(async () => {
   try {
-    const index = await fetchJson("data/index.json");
-    stateOptions.value = index.states || [];
-    if (stateOptions.value.length) {
+    const [census, ideb] = await Promise.allSettled([
+      fetchJson("data/index.json"), fetchJson("data/ideb/index.json"),
+    ]);
+    idebStates.value = ideb.status === "fulfilled" ? ideb.value.states || [] : [];
+    if (census.status === "rejected") error.value = census.reason.message;
+    stateOptions.value = census.status === "fulfilled" ? census.value.states || [] : [];
+    const available = analysisMode.value === "ideb" ? [...stateOptions.value, ...idebStates.value] : stateOptions.value;
+    if (available.length) {
       const preferred = new URLSearchParams(location.search)
         .get("uf")
         ?.toUpperCase();
-      uf.value = stateOptions.value.some((r) => r.uf === preferred)
+      uf.value = available.some((r) => r.uf === preferred)
         ? preferred
-        : stateOptions.value.some((r) => r.uf === "RO")
+        : available.some((r) => r.uf === "RO")
           ? "RO"
-          : stateOptions.value[0].uf;
+          : available[0].uf;
       await loadUf();
     }
   } catch (e) {
@@ -196,6 +204,17 @@ async function loadUf() {
   city.value = "all";
   schools.value = [];
   try {
+    if (analysisMode.value === "ideb") {
+      idebTerritory.value = null;
+      const shapes = await fetchJson(`data/${uf.value}/municipios.geojson`).catch(() => null);
+      if (loadId === thisLoad) {
+        geo.value = shapes;
+        const search = new URL(location.href);
+        search.searchParams.set("uf", uf.value);
+        history.replaceState({}, "", search);
+      }
+      return;
+    }
     const info = await fetchJson(`data/${uf.value}/manifest.json`);
     let shapes = null;
     if (info.map_available)
@@ -217,7 +236,13 @@ async function loadUf() {
     if (loadId === thisLoad) loading.value = false;
   }
 }
-const municipalities = computed(() => manifest.value?.municipalities || []);
+watch(analysisMode, mode => {
+  const search = new URL(location.href);
+  mode === "ideb" ? search.searchParams.set("analysis", "ideb") : search.searchParams.delete("analysis");
+  history.replaceState({}, "", search);
+  if ((mode !== "ideb" && !manifest.value) || (mode === "ideb" && !geo.value)) loadUf();
+});
+const municipalities = computed(() => (analysisMode.value === "ideb" ? idebTerritory.value : manifest.value)?.municipalities || []);
 const indicators = computed(() => manifest.value?.indicators || []);
 const selectedIndicator = computed(() =>
   indicators.value.find((i) => i.key === metric.value),
@@ -377,7 +402,7 @@ function withSeparators(v) {
         </svg>
         <span
           ><strong>Panorama da Educação</strong
-          ><small>Observatório de infraestrutura escolar</small></span
+          ><small>Infraestrutura e desempenho educacional</small></span
         >
       </a>
       <button
@@ -399,7 +424,7 @@ function withSeparators(v) {
         Filtros
       </button>
       <div class="header-context">
-        Censo Escolar <span> / </span> Análise territorial
+        {{ analysisMode === "ideb" ? "Ideb" : "Censo Escolar" }} <span> / </span> Análise territorial
       </div>
       <button v-if="analysisMode === 'aggregate'" class="button" @click="csvDownload" :disabled="!manifest">
         Exportar CSV <span aria-hidden="true">↓</span>
@@ -433,7 +458,7 @@ function withSeparators(v) {
           :class="{ 'is-open': filtersOpen }"
         >
           <p class="sidebar-intro">
-            Explore as condições das escolas em cada território.
+            {{ analysisMode === "ideb" ? "Explore notas oficiais por edição e etapa." : "Explore as condições das escolas em cada território." }}
           </p>
           <div class="filters">
             <SearchSelect
@@ -441,7 +466,7 @@ function withSeparators(v) {
               :options="stateSelectOptions"
               label="Estado"
               placeholder="Pesquisar estado"
-              :disabled="loading || !stateOptions.length"
+              :disabled="loading || !stateSelectOptions.length"
               @change="loadUf"
             />
             <SearchSelect
@@ -450,9 +475,11 @@ function withSeparators(v) {
               label="Município"
               placeholder="Pesquisar município"
               clear-value="all"
-              :disabled="!manifest"
+              :disabled="analysisMode === 'ideb' ? !idebTerritory : !manifest"
             />
+            <div v-if="analysisMode === 'ideb'" id="ideb-filters"></div>
             <SearchSelect
+              v-if="analysisMode !== 'ideb'"
               v-model="metric"
               :options="indicatorSelectOptions"
               label="Indicador"
@@ -468,7 +495,7 @@ function withSeparators(v) {
                 <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
               </select></label
             >
-            <label
+            <label v-if="analysisMode !== 'ideb'"
               >Rede de ensino<select v-model="rede">
                 <option value="all">Todas as redes</option>
                 <option value="1">Federal</option>
@@ -477,7 +504,7 @@ function withSeparators(v) {
                 <option value="4">Privada</option>
               </select></label
             >
-            <label
+            <label v-if="analysisMode !== 'ideb'"
               >Localização<select v-model="area">
                 <option value="all">Urbana e rural</option>
                 <option value="1">Urbana</option>
@@ -486,13 +513,14 @@ function withSeparators(v) {
             >
           </div>
           <button
+            v-if="analysisMode !== 'ideb'"
             class="reset-button"
             @click="resetFilters"
             :disabled="!manifest"
           >
             Redefinir recorte
           </button>
-          <div class="source-note">
+          <div v-if="analysisMode !== 'ideb'" class="source-note">
             <h3>Sobre os dados</h3>
             <p>
               Escolas em atividade. Os percentuais consideram apenas respostas
@@ -514,36 +542,39 @@ function withSeparators(v) {
         :aria-busy="loading"
         :inert="isMobile && filtersOpen"
       >
-        <p v-if="loading" class="message" role="status">
+        <p v-if="loading && analysisMode !== 'ideb'" class="message" role="status">
           Carregando os indicadores…
         </p>
-        <div v-if="error" class="message error" role="alert">
+        <div v-if="error && analysisMode !== 'ideb'" class="message error" role="alert">
           {{ error }}
           <button class="button" @click="loadUf">Tentar novamente</button>
         </div>
-        <p v-if="!loading && !error && !stateOptions.length" class="message">
+        <p v-if="analysisMode !== 'ideb' && !loading && !error && !stateOptions.length" class="message">
           Ainda não há dados disponíveis. Consulte o README para gerar os dados
           do Censo Escolar.
         </p>
-        <template v-if="manifest">
+          <div class="analysis-mode-control perspective-control" role="group" aria-label="Tipo de análise">
+            <button :aria-pressed="analysisMode === 'aggregate'" @click="analysisMode = 'aggregate'">Panorama por ano</button>
+            <button :aria-pressed="analysisMode === 'longitudinal'" @click="analysisMode = 'longitudinal'">Evolução das escolas</button>
+            <button :aria-pressed="analysisMode === 'ideb'" @click="analysisMode = 'ideb'">Desempenho educacional</button>
+          </div>
+        <template v-if="manifest || analysisMode === 'ideb'">
           <section class="intro">
             <div>
               <p class="territory">
-                {{ manifest.state_name }}
+                {{ (analysisMode === "ideb" ? idebTerritory?.state_name : manifest?.state_name) || uf }}
                 <span>/ {{ selectedCity?.name || "Todos os municípios" }}</span>
               </p>
               <h1>Panorama da Educação</h1>
-              <p>Infraestrutura escolar no território e ao longo do tempo.</p>
+              <p>{{ analysisMode === "ideb" ? "Notas oficiais do Ideb no território e entre edições." : "Infraestrutura escolar no território e ao longo do tempo." }}</p>
             </div>
             <span v-if="analysisMode === 'aggregate'" class="reference-year"
               >Referência <strong>{{ year }}</strong></span
             >
           </section>
-          <div class="analysis-mode-control perspective-control" role="group" aria-label="Tipo de análise">
-            <button :aria-pressed="analysisMode === 'aggregate'" @click="analysisMode = 'aggregate'">Panorama por ano</button>
-            <button :aria-pressed="analysisMode === 'longitudinal'" @click="analysisMode = 'longitudinal'">Evolução das escolas</button>
-          </div>
           <LongitudinalPanel v-if="analysisMode === 'longitudinal'" :key="uf" :manifest="manifest" :uf="uf" :geo="geo" :metric="metric" :city="city" :rede="rede" :area="area" @select="selectCity" />
+          <IdebPanel v-else-if="analysisMode === 'ideb'" :key="uf" :uf="uf" :city="city" :geo="geo"
+            @select="city = $event" @territory="idebTerritory = $event" />
           <template v-else>
           <div class="perspective-row">
             <h2>{{ selectedIndicator?.label }}</h2>
@@ -827,7 +858,7 @@ function withSeparators(v) {
             </div>
           </section>
           </template>
-          <footer>
+          <footer v-if="analysisMode !== 'ideb'">
             <span>Fonte: Censo Escolar — Inep · Cartografia: IBGE</span
             ><span
               >Dados gerados:

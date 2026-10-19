@@ -12,3 +12,9 @@ inep_url_template = "https://download.inep.gov.br/dados_abertos/microdados_censo
 inep_2025_url = "https://download.inep.gov.br/dados_abertos/microdados_censo_escolar_2025_.zip"
 ibge_municipios_url = "https://servicodados.ibge.gov.br/api/v1/localidades/estados/{uf}/municipios"
 ibge_malhas_url = "https://servicodados.ibge.gov.br/api/v3/malhas/estados/{uf_code}?intrarregiao=municipio&formato=application/vnd.geo%2Bjson&qualidade=minima"
+
+[ideb]
+cache_dir = "data/raw/ideb"
+output_dir = "frontend/public/data/ideb"
+# Substitua URLs por chave em [ideb.urls] ou use planilhas oficiais locais em
+# [ideb.local_files]. Chaves e mapeamentos: docs/ideb.md.

@@ -115,6 +115,16 @@ oficial e a definição do indicador ajudam a investigar o cálculo.
 - Preserve a compatibilidade entre as saídas Python e o frontend Vue. Mudanças necessárias no formato devem ser discutidas e tratadas em conjunto.
 - Mantenha a arquitetura estática, sem dependência obrigatória de backend.
 
+## Novas fontes de desempenho educacional
+
+Mantenha índices numéricos fora do catálogo booleano de infraestrutura. Para alterar
+as fontes do Ideb, inspecione os arquivos oficiais e atualize o [mapeamento](docs/ideb.md),
+fixtures e testes. Não derive notas territoriais de médias escolares, nem preencha
+restrições de divulgação. Preserve a identidade por código, edição, etapa e rede.
+Mudanças de contrato exigem nova versão em `edu_panorama/ideb/catalog.py` e no
+consumidor Vue. Gere novamente a UF, confira `ideb status` e uma amostra real antes
+de versionar somente as saídas publicáveis; mantenha ZIPs e planilhas no cache ignorado.
+
 ## Checklist do Pull Request
 
 - [ ] A alteração está descrita.

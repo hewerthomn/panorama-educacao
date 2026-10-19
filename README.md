@@ -1,6 +1,6 @@
 # Panorama da Educação
 
-Uma ferramenta de código aberto para explorar e acompanhar a evolução dos indicadores de infraestrutura das escolas brasileiras ao longo dos anos.
+Uma ferramenta de código aberto para explorar a infraestrutura das escolas brasileiras e acompanhar o desempenho educacional com resultados oficiais do Ideb.
 
 O projeto permite visualizar dados por estado e município, comparar períodos e identificar desigualdades no acesso a recursos como água potável, internet, bibliotecas e saneamento básico.
 
@@ -11,6 +11,9 @@ A ideia deste projeto surgiu após a keynote do professor **Fernando Masanori**,
 A apresentação serviu de inspiração para transformar dados públicos sobre a educação brasileira em informações mais acessíveis, visuais e fáceis de explorar.
 
 ## Funcionalidades
+
+- Desempenho educacional: Ideb oficial por UF, município, escola e etapa, separado da infraestrutura.
+- Comparação entre edições do Ideb, mapa de notas 0–10 e histórico escolar por etapa.
 
 - Alternância entre escolas com infraestrutura e matrículas em escolas sem o recurso.
 - Mapa interativo com indicadores por município.
@@ -37,9 +40,47 @@ Os dados são processados em arquivos JSON e GeoJSON, consumidos diretamente pel
 Os dados são obtidos de fontes públicas oficiais:
 
 - [INEP — Censo Escolar](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados/censo-escolar)
+- [Inep — Resultados oficiais do Ideb 2005–2025](https://www.gov.br/inep/pt-br/areas-de-atuacao/pesquisas-estatisticas-e-indicadores/ideb/resultados/2005-2025)
 - [IBGE — Dados geográficos e municípios](https://servicodados.ibge.gov.br/)
 
-A versão atual utiliza dados do Censo Escolar e do IBGE, com suporte inicial aos anos de 2020 a 2025 e possibilidade de ampliar a série histórica.
+A infraestrutura utiliza Censo Escolar e cartografia IBGE, inicialmente de 2020 a 2025. O Ideb utiliza as planilhas oficiais de resultados do Inep, inicialmente nas edições de 2021, 2023 e 2025.
+
+## Desempenho educacional — Ideb
+
+A terceira área de análise apresenta resultados oficiais por UF, município e escola,
+nas etapas de anos iniciais, anos finais e ensino médio. Há filtro de edição e rede
+publicada, ranking por nota ou variação, animação bienal e histórico da mesma escola.
+Localização urbana/rural não é aplicada a resultados que não oferecem essa dimensão.
+
+```bash
+python -m edu_panorama ideb generate --uf RO --years 2021,2023,2025
+python -m edu_panorama ideb generate --all --years 2021,2023,2025
+python -m edu_panorama ideb status --years 2021,2023,2025
+# Reutilizar ZIPs/planilhas locais e forçar atualização:
+python -m edu_panorama ideb generate --uf RO --no-download --force
+```
+
+O importador aceita outras edições existentes nas fontes configuradas, reutiliza cache
+em `data/raw/ideb/` e publica somente JSONs em `frontend/public/data/ideb/`. Não exige
+regenerar infraestrutura. Links e arquivos locais são configuráveis em `config.toml`;
+HTTPS mantém a verificação de certificados. `status` verifica esquema e integridade;
+saídas completas são puladas e `--force` permite reprocessar.
+
+Os dados iniciais versionados abrangem **Rondônia, 2021/2023/2025 e as três etapas**,
+com 5.376 observações. O modo nacional foi validado em saída temporária para as 27 UFs;
+as demais UFs podem ser processadas com `--all`. A interface informa quando uma UF
+não foi processada. As planilhas brutas não são publicadas.
+
+A nota do território é sempre a publicada para a UF ou município; **não é a média das
+escolas**. Valores ausentes e restritos não são zero. A cobertura conta resultados
+escolares publicados entre linhas da fonte, não todas as escolas do Censo. Variações
+são diferenças em pontos em relação à nota anterior disponível da mesma etapa e rede,
+com indicação da edição. Considere as restrições de divulgação e o impacto da pandemia
+na edição de 2021. O cruzamento com o Censo usa código Inep e o ano da edição,
+preservando a etapa; não estabelece causalidade.
+
+Consulte o [mapeamento das fontes, esquema e limitações](docs/ideb.md) e a
+[conferência de 54 células reais de Rondônia](docs/ideb-validation.md).
 
 ## Executando o projeto
 

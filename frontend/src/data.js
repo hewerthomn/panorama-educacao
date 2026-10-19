@@ -137,8 +137,7 @@ export function percent(value) {
     : `${value.toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 1 })}%`;
 }
 
-export function exportCsv(filename, rows) {
-  const columns = [
+export function exportCsv(filename, rows, columns = [
     "codigo_ibge",
     "municipio",
     "ano",
@@ -149,7 +148,7 @@ export function exportCsv(filename, rows) {
     "percentual",
     "perspectiva", "matriculas_sem_recurso", "matriculas_validas",
     "matriculas_sem_resposta_valida", "escolas_sem_matriculas",
-  ];
+  ]) {
   const csv = [
     columns.join(";"),
     ...rows.map((row) =>

@@ -6,6 +6,7 @@ import {
   onMounted,
   onBeforeUnmount,
   nextTick,
+  defineAsyncComponent,
 } from "vue";
 import SearchSelect from "./SearchSelect.vue";
 import MapPanel from "./MapPanel.vue";
@@ -22,6 +23,8 @@ import {
   previousComparison,
 } from "./data.js";
 
+const LongitudinalPanel = defineAsyncComponent(() => import("./LongitudinalPanel.vue"));
+
 const stateOptions = ref([]);
 const uf = ref("RO");
 const manifest = ref(null);
@@ -29,6 +32,7 @@ const geo = ref(null);
 const year = ref(null);
 const metric = ref("agua_potavel");
 const mode = ref("schools");
+const analysisMode = ref("aggregate");
 const enrollmentMode = computed(() => mode.value === "enrollments");
 const measureLabel = computed(() => enrollmentMode.value ? "Matrículas em escolas sem o recurso" : "Escolas com o indicador");
 const city = ref("all");
@@ -155,7 +159,7 @@ onBeforeUnmount(() => {
   pause();
   document.removeEventListener("visibilitychange", visibilityChanged);
 });
-watch([metric, city, rede, area, mode], pause);
+watch([metric, city, rede, area, mode, analysisMode], pause);
 
 let loadId = 0;
 let schoolLoadId = 0;
@@ -295,13 +299,14 @@ const ranking = computed(() =>
     .sort((a, b) => b.pct - a.pct || a.name.localeCompare(b.name, "pt-BR")),
 );
 
-watch([city, year, uf], async () => {
+watch([city, year, uf, analysisMode], async () => {
   const id = ++schoolLoadId;
   schools.value = [];
   schoolsBusy.value = false;
   if (
     !manifest.value?.schools_available ||
     city.value === "all" ||
+    analysisMode.value !== "aggregate" ||
     year.value === null
   )
     return;
@@ -396,7 +401,7 @@ function withSeparators(v) {
       <div class="header-context">
         Censo Escolar <span> / </span> Análise territorial
       </div>
-      <button class="button" @click="csvDownload" :disabled="!manifest">
+      <button v-if="analysisMode === 'aggregate'" class="button" @click="csvDownload" :disabled="!manifest">
         Exportar CSV <span aria-hidden="true">↓</span>
       </button>
     </header>
@@ -454,7 +459,7 @@ function withSeparators(v) {
               placeholder="Pesquisar indicador"
               :disabled="!manifest"
             />
-            <label
+            <label v-if="analysisMode === 'aggregate'"
               >Ano de referência<select
                 v-model.number="year"
                 @change="pause"
@@ -530,10 +535,16 @@ function withSeparators(v) {
               <h1>Panorama da Educação</h1>
               <p>Infraestrutura escolar no território e ao longo do tempo.</p>
             </div>
-            <span class="reference-year"
+            <span v-if="analysisMode === 'aggregate'" class="reference-year"
               >Referência <strong>{{ year }}</strong></span
             >
           </section>
+          <div class="analysis-mode-control perspective-control" role="group" aria-label="Tipo de análise">
+            <button :aria-pressed="analysisMode === 'aggregate'" @click="analysisMode = 'aggregate'">Panorama por ano</button>
+            <button :aria-pressed="analysisMode === 'longitudinal'" @click="analysisMode = 'longitudinal'">Evolução das escolas</button>
+          </div>
+          <LongitudinalPanel v-if="analysisMode === 'longitudinal'" :key="uf" :manifest="manifest" :uf="uf" :geo="geo" :metric="metric" :city="city" :rede="rede" :area="area" @select="selectCity" />
+          <template v-else>
           <div class="perspective-row">
             <h2>{{ selectedIndicator?.label }}</h2>
             <div class="perspective-control" role="group" aria-label="Perspectiva do indicador">
@@ -815,6 +826,7 @@ function withSeparators(v) {
               </table>
             </div>
           </section>
+          </template>
           <footer>
             <span>Fonte: Censo Escolar — Inep · Cartografia: IBGE</span
             ><span
@@ -824,7 +836,7 @@ function withSeparators(v) {
               }}</span
             >
             <p>
-              {{ enrollmentMode ? "Proporções entre matrículas conhecidas em escolas com respostas 0 ou 1." : "Proporções calculadas sobre escolas com respostas 0 ou 1, sem ponderação por matrícula." }} Comparações entre anos exigem verificar
+              {{ analysisMode === 'longitudinal' ? "Evolução das mesmas escolas pelo código Inep, com respostas 0 ou 1 nos dois anos e classificação do ano inicial." : enrollmentMode ? "Proporções entre matrículas conhecidas em escolas com respostas 0 ou 1." : "Proporções calculadas sobre escolas com respostas 0 ou 1, sem ponderação por matrícula." }} Comparações entre anos exigem verificar
               as alterações dos dicionários oficiais.
             </p>
             <div class="footer-project-links">

@@ -1,5 +1,6 @@
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import { evolutionScale, evolutionGradient, evolutionColor, points } from "./longitudinal.js";
 import L from "leaflet";
 import {
   colorFor,
@@ -12,6 +13,8 @@ const props = defineProps({ geo: Object, stats: Object, selected: String, mode: 
 const emit = defineEmits(["select"]);
 const mapEl = ref(null);
 const basemap = ref(true);
+const longitudinal = computed(() => props.mode === "longitudinal");
+const legendTitle = computed(() => longitudinal.value ? "Saldo de evolução das escolas" : props.mode === "enrollments" ? "Matrículas em escolas sem o recurso" : "Escolas com o indicador");
 let map, layer, tiles, observer, lastGeo;
 function fitTerritory() {
   const bounds = layer?.getBounds();
@@ -28,7 +31,7 @@ function update() {
       return {
         color: active ? "#183c50" : "#fff",
         weight: active ? 3 : 1,
-        fillColor: colorFor(props.stats?.[id]?.pct ?? null, props.mode),
+        fillColor: longitudinal.value ? evolutionColor(props.stats?.[id]?.balance ?? null) : colorFor(props.stats?.[id]?.pct ?? null, props.mode),
         fillOpacity: 0.88,
       };
     },
@@ -38,7 +41,9 @@ function update() {
       const name = f.properties?.name || id;
       const format = (value) => value == null ? "N/D" : value.toLocaleString("pt-BR");
       poly.bindTooltip(
-        `<strong>${escapeHtml(name)}</strong><br>${percent(stat?.pct ?? null)}<br>${format(stat?.yes)} de ${format(stat?.valid)} ${props.mode === 'enrollments' ? 'matrículas em escolas sem o recurso / matrículas válidas' : 'escolas com resposta válida'}`,
+        longitudinal.value
+          ? `<strong>${escapeHtml(name)}</strong><br>Saldo: ${points(stat?.balance)}<br>${format(stat?.comparable)} comparáveis<br>${format(stat?.improved)} melhoraram · ${format(stat?.worsened)} pioraram<br>${format(stat ? stat.retainedWith + stat.retainedWithout : null)} sem mudança<br>${format(stat?.invalid)} sem comparação válida`
+          : `<strong>${escapeHtml(name)}</strong><br>${percent(stat?.pct ?? null)}<br>${format(stat?.yes)} de ${format(stat?.valid)} ${props.mode === 'enrollments' ? 'matrículas em escolas sem o recurso / matrículas válidas' : 'escolas com resposta válida'}`,
       );
       poly.on("click", () => emit("select", id));
       poly.on("mouseover", () =>
@@ -113,22 +118,22 @@ onBeforeUnmount(() => {
     </div>
     <div
       class="map-legend"
-      :aria-label="mode === 'enrollments' ? 'Legenda: percentual de matrículas em escolas sem o recurso' : 'Legenda: percentual de escolas com o indicador'"
+      :aria-label="`Legenda: ${legendTitle}`"
     >
-      <strong>{{ mode === 'enrollments' ? 'Matrículas em escolas sem o recurso' : 'Escolas com o indicador' }}</strong>
+      <strong>{{ legendTitle }}</strong>
       <div
         class="legend-ramp"
-        :style="{ background: gradientFor(mode) }"
+        :style="{ background: longitudinal ? evolutionGradient : gradientFor(mode) }"
         aria-hidden="true"
       ></div>
       <div class="legend-values">
-        <span v-for="c in mapScale" :key="c.value">{{ c.label }}</span>
+        <span v-for="c in (longitudinal ? evolutionScale : mapScale)" :key="c.value">{{ c.label }}</span>
       </div>
       <div class="legend-caption">
         <span
           ><i class="no-data-swatch" :style="{ background: noDataColor }"></i>
           N/D · sem dados válidos</span
-        ><span>Escala fixa · %</span>
+        ><span>{{ longitudinal ? 'Escala fixa · p.p.' : 'Escala fixa · %' }}</span>
       </div>
     </div>
     <p class="map-instruction">Selecione um município para detalhar</p>

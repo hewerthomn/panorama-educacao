@@ -65,6 +65,30 @@ def test_separate_2025_enrollments(tmp_path):
     assert not available['biblioteca']
 
 
+def test_annual_school_contract_supports_longitudinal_identity(tmp_path):
+    """O browser pode vincular o mesmo Inep mesmo com troca de classificação em 2025."""
+    initial_zip, final_zip = tmp_path / '2020.zip', tmp_path / '2025.zip'
+    make_zip(initial_zip, {'microdados_ed_basica_2020.csv': CSV_2024})
+    changed = CSV_2025.replace(
+        '10001|Escola A|RO|1100205|Porto Velho|3|1|1|1|1',
+        '10001|Novo nome|RO|1100015|Outro município|2|2|1|0|1')
+    make_zip(final_zip, {'Tabela_Escola_2025.csv': changed,
+                         'Tabela_Matricula_2025.csv': MATRICULAS_2025})
+    before = {s['id']: s for s in load_year(initial_zip, 2020, 'RO', 1)[0]}
+    after = {s['id']: s for s in load_year(final_zip, 2025, 'RO', 1)[0]}
+    assert before.keys() & after.keys() == {'10001', '10003'}
+    assert before['10001']['name'] == 'Escola A'
+    assert after['10001']['name'] == 'Novo nome'
+    assert before['10001']['municipio'] != after['10001']['municipio']
+    assert before['10001']['rede'] != after['10001']['rede']
+    assert before['10001']['localizacao'] != after['10001']['localizacao']
+    assert before['10001']['indicators']['agua_potavel'] == 1
+    assert after['10001']['indicators']['agua_potavel'] == 0
+    assert before['10003']['indicators']['agua_potavel'] is None
+    # Mudança de layout/tabela de matrículas não altera o contrato dos indicadores.
+    assert set(before['10001']['indicators']) == set(after['10001']['indicators']) == set(INDICATORS)
+
+
 def test_geo_code():
     assert feature_code(GEO['features'][0]) == '1100205'
 

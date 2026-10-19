@@ -200,7 +200,8 @@ small {
   font-size: 14px;
   font-weight: 600;
 }
-.filters select {
+.filters select,
+.longitudinal select {
   width: 100%;
   min-width: 0;
   min-height: 44px;
@@ -1224,6 +1225,49 @@ footer p {
   max-width: 110ch;
 }
 .coverage-note { margin-top: -8px; }
+
+/* Longitudinal analysis reuses the editorial sections and statistical bands. */
+:root {
+  --evolution-positive: #327553;
+  --evolution-negative: #b7443e;
+  --evolution-amber: #b57d36;
+}
+.analysis-mode-control { display: flex; width: fit-content; margin-bottom: 24px; max-width: 100%; }
+.analysis-mode-control button { flex: none; }
+.longitudinal { min-width: 0; }
+.longitudinal .table-wrap { position: relative; }
+.longitudinal-subtitle { margin-top: 6px; color: var(--muted); }
+.period-control { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.period-control label { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.period-control select { min-width: 88px; }
+.evolution-summary { display: flex; align-items: center; gap: 32px; margin: 24px 0; }
+.evolution-summary > div { flex-shrink: 0; }
+.evolution-summary > div > span { display: block; color: var(--muted); font-size: 14px; }
+.evolution-summary > div > strong { display: block; font-size: 36px; color: var(--ink); font-weight: 650; }
+.evolution-summary p { max-width: 80ch; color: var(--muted); font-size: 14px; }
+.evolution-summary p strong { color: var(--ink); }
+.evolution-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.evolution-kpis .kpi strong { font-size: 30px; }
+.cohort-method { color: var(--muted); font-size: 14px; margin: -8px 0 20px; }
+.cohort-method summary { min-height: 44px; padding-block: 12px; color: var(--accent); }
+.cohort-method p { max-width: 100ch; margin-bottom: 12px; }
+.municipal-comparison { padding: 16px 24px; border-top: 1px solid var(--line); }
+.municipal-comparison p { font-size: 14px; color: var(--muted); margin: 8px 0 12px; }
+.ranking-order { font-size: 13px; display: grid; gap: 4px; }
+.school-list-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 24px 20px; }
+.school-list-filters label { display: grid; gap: 6px; font-size: 14px; }
+.school-list-filters input { min-height: 44px; min-width: 0; width: 100%; font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--muted); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+.list-status { padding: 16px 24px; color: var(--muted); }
+.list-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 24px; }
+.list-pagination span { flex: 1; font-size: 14px; color: var(--muted); }
+.school-code, .school-change { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 6px; }
+.school-change { min-width: 180px; }
+.school-history-timeline { list-style: none; padding: 0 24px 20px; margin: 0; }
+.school-history-timeline li { display: flex; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.school-history-timeline li > strong { border-left: 4px solid var(--muted); padding-left: 12px; min-width: 65px; }
+.school-history-timeline .answer-yes > strong { border-color: var(--evolution-positive); }
+.school-history-timeline .answer-no > strong { border-color: var(--evolution-negative); }
+.school-history-timeline small { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); }
 .complementary-charts {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) minmax(0, 1fr);
@@ -1475,4 +1519,28 @@ footer p {
   .search-select input {
     font-size: 16px;
   }
+}
+
+@media (max-width: 1200px) {
+  .evolution-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 20px; }
+  .evolution-kpis .kpi:nth-child(3) { border-left: 1px solid var(--line); }
+  .evolution-kpis .kpi:nth-child(4) { border-left: 0; }
+}
+@media (max-width: 700px) {
+  .analysis-mode-control { width: 100%; }
+  .analysis-mode-control button { padding-inline: 12px; flex: 1; }
+  .longitudinal select { font-size: 16px; }
+  .period-control { width: 100%; }
+  .evolution-summary { flex-direction: column; align-items: start; gap: 12px; }
+  .evolution-summary > div > strong { font-size: 32px; }
+  .evolution-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .evolution-kpis .kpi:nth-child(odd) { border-left: 0; }
+  .evolution-kpis .kpi:nth-child(even) { border-left: 1px solid var(--line); padding-left: 12px; }
+  .longitudinal .panel-head { flex-wrap: wrap; }
+  .ranking-order { width: 100%; }
+  .school-list-filters { grid-template-columns: minmax(0, 1fr); padding: 0 16px 16px; }
+  .municipal-comparison, .list-pagination { padding: 16px; }
+  .school-history-timeline { padding-inline: 16px; }
+  .school-history-timeline li { gap: 12px; }
+  .school-history .panel-head { overflow-wrap: anywhere; }
 }

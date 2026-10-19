@@ -97,3 +97,25 @@ são independentes da escala contínua do mapa e ficam fixas entre anos.
 As legendas podem ser operadas por teclado ou toque para consultar a taxa e os
 denominadores; o canvas também oferece tooltips. A animação de entrada dos donuts
 está desativada para manter a leitura durante a reprodução temporal.
+
+## Evolução das escolas
+
+O controle segmentado de tipo de análise fica acima do indicador. Panorama por ano
+preserva as perspectivas Escolas/Matrículas e os três gráficos. Evolução das escolas
+usa os mesmos filtros laterais, substitui o ano de referência por De/Até junto ao
+título e pausa a animação. Os períodos são independentes do slider existente.
+
+A hierarquia é saldo e tamanho da coorte, faixa com cinco contagens, mapa, barras
+horizontais de transições, ranking e lista paginada. O histórico individual se abre
+na própria página, com foco no título e retorno à lista. Cores têm rótulos textuais:
+resposta ausente e ausência da base ativa aparecem separadamente.
+
+Os tokens `--evolution-positive`, `--evolution-negative` e `--evolution-amber`
+preservam a paleta estatística. A legenda/mapa compartilham `evolutionScale` e
+`evolutionColor`: −100 e +100 p.p. fixos, centro neutro em zero, N/D cinza.
+Não há amplificação automática de pequenas variações. Os cinco valores se reorganizam
+em três e duas colunas; filtros de lista e seletores de período fluem no mobile.
+
+Comparações e índices ficam em um Web Worker por UF. A tela limpa os resultados
+ao alterar filtros e descarta respostas obsoletas. Só totais, páginas de 50 escolas
+e o histórico individual cruzam para a interface; nenhuma dependência foi adicionada.

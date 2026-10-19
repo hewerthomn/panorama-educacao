@@ -1,47 +1,135 @@
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import L from 'leaflet'
-import {colorFor, percent} from './data.js'
-const props = defineProps({geo: Object, stats: Object, selected: String})
-const emit = defineEmits(['select'])
-const mapEl = ref(null)
-let map, layer
-
+import { ref, watch, onMounted, onBeforeUnmount } from "vue";
+import L from "leaflet";
+import {
+  colorFor,
+  percent,
+  mapScale,
+  mapGradient,
+  noDataColor,
+} from "./data.js";
+const props = defineProps({ geo: Object, stats: Object, selected: String });
+const emit = defineEmits(["select"]);
+const mapEl = ref(null);
+const basemap = ref(true);
+let map, layer, tiles, observer, lastGeo;
+function fitTerritory() {
+  const bounds = layer?.getBounds();
+  if (bounds?.isValid())
+    map.fitBounds(bounds, { padding: [28, 28], animate: false });
+}
 function update() {
-  if (!map || !props.geo) return
-  if (layer) layer.remove()
+  if (!map || !props.geo) return;
+  if (layer) layer.remove();
   layer = L.geoJSON(props.geo, {
-    style: f => {
-      const id = f.properties?.id
-      const stat = props.stats?.[id]
-      const active = props.selected === id
-      return {color: active ? '#122c50' : '#ffffff', weight: active ? 3 : 1,
-              fillColor: colorFor(stat?.pct ?? null), fillOpacity: .79}
+    style: (f) => {
+      const id = String(f.properties?.id ?? f.id);
+      const active = props.selected === id;
+      return {
+        color: active ? "#183c50" : "#fff",
+        weight: active ? 3 : 1,
+        fillColor: colorFor(props.stats?.[id]?.pct ?? null),
+        fillOpacity: 0.88,
+      };
     },
     onEachFeature: (f, poly) => {
-      const id = f.properties?.id, stat = props.stats?.[id]
-      const name = f.properties?.name || id
-      poly.bindTooltip(`<strong>${escapeHtml(name)}</strong><br>${percent(stat?.pct ?? null)}<br>${stat?.yes ?? 0} de ${stat?.valid ?? 0} escolas com resposta válida`)
-      poly.on('click', () => emit('select', id))
-      poly.on('mouseover', () => poly.setStyle({weight:3, color:'#20375d'}))
-      poly.on('mouseout', () => layer?.resetStyle(poly))
+      const id = String(f.properties?.id ?? f.id),
+        stat = props.stats?.[id];
+      const name = f.properties?.name || id;
+      poly.bindTooltip(
+        `<strong>${escapeHtml(name)}</strong><br>${percent(stat?.pct ?? null)}<br>${stat?.yes ?? 0} de ${stat?.valid ?? 0} escolas com resposta válida`,
+      );
+      poly.on("click", () => emit("select", id));
+      poly.on("mouseover", () =>
+        poly.setStyle({ weight: 3, color: "#183c50" }),
+      );
+      poly.on("mouseout", () => layer?.resetStyle(poly));
     },
-  }).addTo(map)
-  if (!map._initialBoundsFit) {
-    const bounds = layer.getBounds()
-    if (bounds.isValid()) { map.fitBounds(bounds, {padding:[16,16]}); map._initialBoundsFit = true }
+  }).addTo(map);
+  if (lastGeo !== props.geo) {
+    fitTerritory();
+    lastGeo = props.geo;
   }
 }
-function escapeHtml(s) {return String(s).replace(/[&<>"']/g, v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[v]))}
+function toggleBasemap() {
+  basemap.value = !basemap.value;
+  basemap.value ? tiles.addTo(map) : tiles.remove();
+}
+function escapeHtml(s) {
+  return String(s).replace(
+    /[&<>"']/g,
+    (v) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        v
+      ],
+  );
+}
 onMounted(() => {
-  map = L.map(mapEl.value, {zoomControl:true, scrollWheelZoom:false, preferCanvas:true})
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  map = L.map(mapEl.value, {
+    zoomControl: false,
+    zoomSnap: 0.25,
+    scrollWheelZoom: false,
+    preferCanvas: true,
+  });
+  L.control
+    .zoom({
+      position: "topright",
+      zoomInTitle: "Aproximar",
+      zoomOutTitle: "Afastar",
+    })
+    .addTo(map);
+  tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 18,
-  }).addTo(map)
-  update()
-})
-watch(() => [props.geo, props.stats, props.selected], update, {deep:false})
-onBeforeUnmount(() => {if(map) map.remove()})
+  }).addTo(map);
+  update();
+  observer = new ResizeObserver(() => {
+    map.invalidateSize();
+    fitTerritory();
+  });
+  observer.observe(mapEl.value);
+});
+watch(() => [props.geo, props.stats, props.selected], update);
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  map?.remove();
+});
 </script>
-<template><div ref="mapEl" class="map"></div></template>
+<template>
+  <div class="map-stage">
+    <div
+      ref="mapEl"
+      class="map"
+      role="region"
+      aria-label="Mapa dos municípios. Use os filtros ou o ranking para selecionar um município por teclado."
+    ></div>
+    <div class="map-tools">
+      <button class="button" @click="fitTerritory">Enquadrar estado</button
+      ><button class="button" @click="toggleBasemap" :aria-pressed="basemap">
+        Mapa de fundo
+      </button>
+    </div>
+    <div
+      class="map-legend"
+      aria-label="Legenda: percentual de escolas com o indicador"
+    >
+      <strong>Escolas com o indicador</strong>
+      <div
+        class="legend-ramp"
+        :style="{ background: mapGradient }"
+        aria-hidden="true"
+      ></div>
+      <div class="legend-values">
+        <span v-for="c in mapScale" :key="c.value">{{ c.label }}</span>
+      </div>
+      <div class="legend-caption">
+        <span
+          ><i class="no-data-swatch" :style="{ background: noDataColor }"></i>
+          N/D · sem resposta válida</span
+        ><span>Escala fixa · %</span>
+      </div>
+    </div>
+    <p class="map-instruction">Selecione um município para detalhar</p>
+  </div>
+</template>

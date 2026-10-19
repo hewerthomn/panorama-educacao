@@ -10,6 +10,8 @@ import {
 import SearchSelect from "./SearchSelect.vue";
 import MapPanel from "./MapPanel.vue";
 import TrendChart from "./TrendChart.vue";
+import DistributionChart from "./DistributionChart.vue";
+import { distributionFor } from "./distribution.js";
 import {
   fetchJson,
   subset,
@@ -251,6 +253,34 @@ const trend = computed(() =>
       metric.value,
     ),
   })),
+);
+const networkDistribution = computed(() =>
+  distributionFor(manifest.value, {
+    dimension: "rede",
+    year: year.value,
+    metric: metric.value,
+    city: city.value,
+    rede: rede.value,
+    area: area.value,
+  }),
+);
+const locationDistribution = computed(() =>
+  distributionFor(manifest.value, {
+    dimension: "localizacao",
+    year: year.value,
+    metric: metric.value,
+    city: city.value,
+    rede: rede.value,
+    area: area.value,
+  }),
+);
+const networkScope = computed(
+  () =>
+    `Todas as redes · ${area.value === "all" ? "urbana e rural" : area.value === "1" ? "urbana" : "rural"}${rede.value !== "all" ? ". O filtro de rede não se aplica a este gráfico." : ""}`,
+);
+const locationScope = computed(
+  () =>
+    `Urbana e rural · ${{ all: "todas as redes", 1: "rede federal", 2: "rede estadual", 3: "rede municipal", 4: "rede privada" }[rede.value]}${area.value !== "all" ? ". O filtro de localização não se aplica a este gráfico." : ""}`,
 );
 const ranking = computed(() =>
   municipalities.value
@@ -579,106 +609,125 @@ function withSeparators(v) {
               </div>
             </div>
           </section>
-          <div class="analysis-grid">
-            <section class="panel trends">
-              <div class="panel-head">
-                <div>
-                  <h2>Evolução histórica</h2>
-                  <p>
-                    {{ selectedCity?.name || manifest.state_name }} ·
-                    {{ selectedIndicator?.label }}
-                  </p>
-                </div>
+          <section
+            class="panel analysis-block"
+            aria-labelledby="history-heading"
+          >
+            <div class="panel-head">
+              <div>
+                <h2 id="history-heading">Evolução histórica</h2>
+                <p>
+                  {{ selectedCity?.name || manifest.state_name }} ·
+                  {{ selectedIndicator?.label }} · distribuições de {{ year }}
+                </p>
               </div>
-              <TrendChart :series="trend" :year="year" />
-              <details class="series-details">
-                <summary>Consultar valores por ano</summary>
-                <div class="table-wrap">
-                  <table>
-                    <caption class="sr-only">
-                      Série histórica do indicador selecionado
-                    </caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">Ano</th>
-                        <th scope="col">Cobertura</th>
-                        <th scope="col">Com indicador / válidas</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="point in trend" :key="point.year">
-                        <th scope="row">{{ point.year }}</th>
-                        <td>{{ percent(point.pct) }}</td>
-                        <td>{{ point.yes }} / {{ point.valid }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </details>
-              <p class="chart-note">
-                N/D indica ausência de respostas válidas. Lacunas não são
-                interpoladas.
-              </p>
-            </section>
-            <section class="panel below">
-              <div class="panel-head">
-                <div>
-                  <h2>Municípios em destaque</h2>
-                  <p>
-                    Ordenação pelo percentual do indicador, apenas com respostas
-                    válidas.
-                  </p>
-                </div>
-                <small>{{ ranking.length }} com dados</small>
+            </div>
+            <div class="complementary-charts">
+              <DistributionChart
+                :distribution="networkDistribution"
+                title="Distribuição por rede"
+                :scope="networkScope"
+              />
+              <div class="historical-chart">
+                <h3>Série anual</h3>
+                <p class="historical-scope">
+                  Cobertura do indicador · todos os filtros aplicados
+                </p>
+                <TrendChart :series="trend" :year="year" />
+                <details class="series-details">
+                  <summary>Consultar valores por ano</summary>
+                  <div class="table-wrap">
+                    <table>
+                      <caption class="sr-only">
+                        Série histórica do indicador selecionado
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">Ano</th>
+                          <th scope="col">Cobertura</th>
+                          <th scope="col">Com indicador / válidas</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="point in trend" :key="point.year">
+                          <th scope="row">{{ point.year }}</th>
+                          <td>{{ percent(point.pct) }}</td>
+                          <td>{{ point.yes }} / {{ point.valid }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+                <p class="chart-note">
+                  N/D indica ausência de respostas válidas. Lacunas não são
+                  interpoladas.
+                </p>
               </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">Município</th>
-                      <th scope="col">Escolas c/ indicador</th>
-                      <th scope="col">Respostas válidas</th>
-                      <th scope="col">Percentual</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="m in ranking.slice(0, 15)"
-                      :key="m.id"
-                      :class="{ chosen: city === m.id }"
-                    >
-                      <th scope="row">
-                        <button
-                          class="city-link"
-                          @click="selectCity(m.id)"
-                          :aria-pressed="city === m.id"
-                        >
-                          {{ m.name }}
-                        </button>
-                      </th>
-                      <td>{{ m.yes }}</td>
-                      <td>{{ m.valid }}</td>
-                      <td>
-                        <span class="bar"
-                          ><i
-                            :style="{
-                              width: m.pct + '%',
-                              background: colorFor(m.pct),
-                            }"
-                          ></i></span
-                        >{{ percent(m.pct) }}
-                      </td>
-                    </tr>
-                    <tr v-if="!ranking.length">
-                      <td colspan="4">
-                        Não há respostas válidas para este recorte.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+              <DistributionChart
+                :distribution="locationDistribution"
+                title="Distribuição por localização"
+                :scope="locationScope"
+              />
+            </div>
+          </section>
+          <section class="panel below">
+            <div class="panel-head">
+              <div>
+                <h2>Municípios em destaque</h2>
+                <p>
+                  Ordenação pelo percentual do indicador, apenas com respostas
+                  válidas.
+                </p>
               </div>
-            </section>
-          </div>
+              <small>{{ ranking.length }} com dados</small>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Município</th>
+                    <th scope="col">Escolas c/ indicador</th>
+                    <th scope="col">Respostas válidas</th>
+                    <th scope="col">Percentual</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="m in ranking.slice(0, 15)"
+                    :key="m.id"
+                    :class="{ chosen: city === m.id }"
+                  >
+                    <th scope="row">
+                      <button
+                        class="city-link"
+                        @click="selectCity(m.id)"
+                        :aria-pressed="city === m.id"
+                      >
+                        {{ m.name }}
+                      </button>
+                    </th>
+                    <td>{{ m.yes }}</td>
+                    <td>{{ m.valid }}</td>
+                    <td>
+                      <span class="bar"
+                        ><i
+                          :style="{
+                            width: m.pct + '%',
+                            background: colorFor(m.pct),
+                          }"
+                        ></i></span
+                      >{{ percent(m.pct) }}
+                    </td>
+                  </tr>
+                  <tr v-if="!ranking.length">
+                    <td colspan="4">
+                      Não há respostas válidas para este recorte.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
           <section
             v-if="city !== 'all' && manifest.schools_available"
             class="panel below"

@@ -10,7 +10,8 @@ Filtros (280 px) | Território / indicador / ano
                 | Faixa de indicadores
                 | Mapa municipal + controles + legenda
                 | Reprodução e seleção de ano
-                | Série histórica       | Ranking municipal
+                | Rede / série histórica / localização
+                | Ranking municipal
 ```
 
 ## Tokens
@@ -70,3 +71,29 @@ de apontar polígonos no mapa. Animações do gráfico estão desativadas.
 Vue, Vite, Leaflet e Chart.js são preservados. Não há dependências de UI novas,
 backend ou mudanças nos contratos JSON/GeoJSON. URLs de dados continuam usando
 `import.meta.env.BASE_URL` para publicação em subdiretórios do GitHub Pages.
+
+## Distribuições do indicador
+
+O bloco Evolução histórica reúne distribuição por rede, série anual e distribuição
+por localização, nessa ordem. A série ocupa uma largura maior. Em áreas com menos
+de 720 px disponíveis, as visualizações se empilham; o ranking aparece depois.
+
+Os donuts usam `distributionFor`, em `frontend/src/distribution.js`, sobre os
+agregados existentes. A participação divide escolas com resposta 1 na categoria
+pelo total de escolas com resposta 1 no recorte. A taxa de atendimento divide
+respostas 1 pelas respostas 0 ou 1 dentro da categoria. As duas medidas aparecem
+com nomes distintos nos tooltips; a legenda mostra quantidade e participação.
+
+Cada donut ignora apenas o filtro da própria dimensão: rede mantém localização;
+localização mantém rede. Ambos mantêm UF, município, ano e indicador. Os subtítulos
+explicitam a exceção quando o filtro está ativo. Sem filtro na própria dimensão,
+o total central corresponde às escolas atendidas no resumo principal.
+
+Categorias sem classificação entram no total e aparecem em cinza, sem perder
+participações. Ausência de respostas válidas exibe N/D. Zero válido exibe 0 com
+anel neutro, pois não há distribuição de escolas atendidas. As cores categóricas
+são independentes da escala contínua do mapa e ficam fixas entre anos.
+
+As legendas podem ser operadas por teclado ou toque para consultar a taxa e os
+denominadores; o canvas também oferece tooltips. A animação de entrada dos donuts
+está desativada para manter a leitura durante a reprodução temporal.

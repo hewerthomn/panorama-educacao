@@ -1,0 +1,14 @@
+[project]
+uf = "RO"
+years = [2020, 2021, 2022, 2023, 2024, 2025]
+raw_dir = "data/raw"
+output_dir = "frontend/public/data"
+chunksize = 50000
+include_schools = true
+
+[sources]
+# URLs oficiais do Inep; 2025 tem um sublinhado antes do .zip.
+inep_url_template = "https://download.inep.gov.br/dados_abertos/microdados_censo_escolar_{year}.zip"
+inep_2025_url = "https://download.inep.gov.br/dados_abertos/microdados_censo_escolar_2025_.zip"
+ibge_municipios_url = "https://servicodados.ibge.gov.br/api/v1/localidades/estados/{uf}/municipios"
+ibge_malhas_url = "https://servicodados.ibge.gov.br/api/v3/malhas/estados/{uf_code}?intrarregiao=municipio&formato=application/vnd.geo%2Bjson&qualidade=minima"

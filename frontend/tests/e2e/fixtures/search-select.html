@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import { createApp, h, ref } from "vue";
+      import SearchSelect from "../../../src/SearchSelect.vue";
+      import "../../../src/style.css";
+      createApp({
+        setup() {
+          const value = ref("all"),
+            changes = ref(0),
+            outsideClicks = ref(0);
+          const options = [
+            { value: "all", label: "Todos os indicadores" },
+            { value: "water", label: "Água potável" },
+            ...Array.from({ length: 20 }, (_, i) => ({
+              value: `item-${i}`,
+              label: `Indicador ${i + 1}`,
+            })),
+            { value: "library", label: "Biblioteca" },
+          ];
+          return () =>
+            h("div", [
+              h(
+                "aside",
+                {
+                  class: "sidebar",
+                  style:
+                    "position:relative;inset:auto;width:340px;height:380px;overflow-y:auto",
+                },
+                [
+                  h(SearchSelect, {
+                    modelValue: value.value,
+                    options,
+                    label: "Indicador",
+                    clearValue: "all",
+                    "onUpdate:modelValue": (v) => (value.value = v),
+                    onChange: () => changes.value++,
+                  }),
+                  h("div", { style: "height:350px" }),
+                ],
+              ),
+              h("output", { "data-testid": "selected" }, value.value),
+              h("output", { "data-testid": "changes" }, String(changes.value)),
+              h(
+                "output",
+                { "data-testid": "outside-clicks" },
+                String(outsideClicks.value),
+              ),
+              h(
+                "button",
+                { type: "button", onClick: () => outsideClicks.value++ },
+                "Fora do filtro",
+              ),
+            ]);
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>

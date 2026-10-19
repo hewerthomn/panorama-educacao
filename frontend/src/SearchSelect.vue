@@ -1,5 +1,13 @@
 <script setup>
-import { computed, nextTick, ref, useId, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  useId,
+  watch,
+} from "vue";
 const props = defineProps({
   modelValue: String,
   options: { type: Array, default: () => [] },
@@ -28,21 +36,139 @@ const filtered = computed(() =>
     normalize(o.label).includes(normalize(query.value)),
   ),
 );
+// Touch selection is completed on pointerup, independently of compatibility clicks.
+// Keep native scrolling enabled and remember the whole gesture, not just its end.
+let gesture = null;
+let handledTouch = null;
+let lastPointerType = "mouse";
+const movementTolerance = 10;
+function optionPointerDown(event, option) {
+  if (props.disabled || event.isPrimary === false || event.button !== 0) return;
+  lastPointerType = event.pointerType || "mouse";
+  if (lastPointerType === "mouse") {
+    event.preventDefault(); // Preserve the input's focus for desktop clicking.
+    return;
+  }
+  gesture = {
+    pointerId: event.pointerId,
+    value: option.value,
+    x: event.clientX,
+    y: event.clientY,
+    moved: false,
+  };
+}
+function pointerMove(event) {
+  if (!gesture || event.pointerId !== gesture.pointerId) return;
+  if (
+    Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) >
+    movementTolerance
+  ) {
+    gesture.moved = true;
+  }
+}
+function scrollDuringGesture(event) {
+  const target = event.target;
+  if (
+    gesture &&
+    target instanceof Element &&
+    (root.value?.contains(target) || target.contains(root.value))
+  ) {
+    gesture.moved = true;
+  }
+}
+function pointerEnd(event) {
+  if (!gesture || event.pointerId !== gesture.pointerId) return;
+  pointerMove(event);
+  const finished = gesture;
+  gesture = null;
+  if (event.type === "pointercancel" || finished.moved || !open.value) return;
+  // Touch pointers may be implicitly captured: verify the actual release position.
+  const releasedOption = document
+    .elementFromPoint(event.clientX, event.clientY)
+    ?.closest('[role="option"]');
+  if (
+    !root.value?.contains(releasedOption) ||
+    releasedOption?.dataset.value !== finished.value
+  )
+    return;
+  const option = filtered.value.find(
+    (option) => option.value === finished.value,
+  );
+  if (option) {
+    handledTouch = { x: event.clientX, y: event.clientY };
+    choose(option, true);
+  }
+}
+function optionClick(event, option) {
+  if (!open.value) return;
+  // Mouse retains click; touch/pen already handled pointerup (or canceled a scroll).
+  // Zero-detail clicks also support activation by assistive technology.
+  if (lastPointerType !== "mouse" && event.detail > 0) return;
+  choose(option);
+}
+function compatibilityMouseEvent(event) {
+  // Safari can target the field underneath after pointerup removes the menu.
+  // Cancel only the residual mouse sequence at this touch position; the next
+  // real pointerdown clears the guard, so subsequent mouse/touch actions work.
+  if (
+    !handledTouch ||
+    (event.type === "click" && event.detail === 0 && !event.pointerType)
+  )
+    return;
+  if (
+    Math.hypot(event.clientX - handledTouch.x, event.clientY - handledTouch.y) >
+    movementTolerance
+  )
+    return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (event.type === "click") handledTouch = null;
+}
+function outsidePointerDown(event) {
+  handledTouch = null;
+  if (!root.value?.contains(event.target)) close();
+}
+onMounted(() => {
+  document.addEventListener("pointerdown", outsidePointerDown, true);
+  for (const type of ["mousedown", "mouseup", "click"]) {
+    document.addEventListener(type, compatibilityMouseEvent, true);
+  }
+  document.addEventListener("pointermove", pointerMove, { passive: true });
+  document.addEventListener("pointerup", pointerEnd);
+  document.addEventListener("pointercancel", pointerEnd);
+  document.addEventListener("scroll", scrollDuringGesture, true);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("pointerdown", outsidePointerDown, true);
+  for (const type of ["mousedown", "mouseup", "click"]) {
+    document.removeEventListener(type, compatibilityMouseEvent, true);
+  }
+  document.removeEventListener("pointermove", pointerMove);
+  document.removeEventListener("pointerup", pointerEnd);
+  document.removeEventListener("pointercancel", pointerEnd);
+  document.removeEventListener("scroll", scrollDuringGesture, true);
+});
 function begin() {
   if (props.disabled) return;
+  lastPointerType = "mouse";
   open.value = true;
   query.value = "";
   active.value = filtered.value.findIndex((o) => o.value === props.modelValue);
 }
 function close() {
+  gesture = null;
   open.value = false;
   query.value = "";
   active.value = -1;
 }
-function choose(option) {
+function choose(option, touch = false) {
+  if (props.disabled) return;
   emit("update:modelValue", option.value);
   emit("change", option.value);
-  input.value?.focus();
+  // End touch interaction without reopening the virtual keyboard or scrolling
+  // the drawer. Keep keyboard/mouse focus on the combobox as before.
+  if (touch) root.value?.focus({ preventScroll: true });
+  else input.value?.focus({ preventScroll: true });
   close();
 }
 function search(event) {
@@ -79,11 +205,13 @@ function keydown(event) {
   }
 }
 function focusout(event) {
-  if (!root.value?.contains(event.relatedTarget)) close();
+  // Safari can blur the input before delivering pointerup to a touched option.
+  if (!gesture && !root.value?.contains(event.relatedTarget)) close();
 }
 watch(
   () => props.options,
   () => {
+    gesture = null;
     active.value = -1;
     query.value = "";
   },
@@ -91,7 +219,13 @@ watch(
 watch(() => props.disabled, close);
 </script>
 <template>
-  <div ref="root" class="search-select" @focusout="focusout">
+  <div
+    ref="root"
+    class="search-select"
+    :class="{ 'is-open': open }"
+    tabindex="-1"
+    @focusout="focusout"
+  >
     <label :for="id">{{ label }}</label>
     <div class="search-select-control">
       <input
@@ -135,8 +269,9 @@ watch(() => props.disabled, close);
           role="option"
           :aria-selected="modelValue === option.value"
           :class="{ 'is-active': active === index }"
-          @pointerdown.prevent
-          @click="choose(option)"
+          :data-value="option.value"
+          @pointerdown="optionPointerDown($event, option)"
+          @click="optionClick($event, option)"
         >
           {{ option.label
           }}<span v-if="modelValue === option.value" aria-hidden="true">✓</span>

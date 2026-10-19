@@ -91,6 +91,34 @@ Dados ausentes são identificados separadamente e não são tratados como zero.
 
 Como os questionários do Censo Escolar podem mudar ao longo dos anos, comparações históricas devem considerar possíveis alterações nas definições dos indicadores.
 
+## Testes dos filtros pesquisáveis
+
+O Playwright é uma dependência apenas de desenvolvimento:
+
+```bash
+cd frontend
+npm install
+npx playwright install chromium webkit
+npm test
+npm run test:e2e
+```
+
+A suíte cobre mouse e teclado no Chromium desktop, toque no Chromium com perfil
+Android e toque no WebKit com perfil iPhone. Verifica busca, seleção, saída de foco
+antes de `pointerup`, rolagem, cancelamento, emissão única e atualização dos três
+filtros no dashboard. Traces de falhas ficam no diretório temporário do sistema.
+
+Os perfis móveis não substituem a conferência em aparelhos físicos nem reproduzem
+o teclado virtual do sistema operacional.
+
+## Contribuindo
+
+O Panorama da Educação é open source e recebe contribuições para novos indicadores,
+processamento de dados, mapas e gráficos, correções, acessibilidade e documentação.
+
+- [Guia de contribuição](CONTRIBUTING.md)
+- [Reportar problema ou sugerir melhoria](https://github.com/hewerthomn/panorama-educacao/issues/new)
+
 ## Objetivo
 
 Facilitar o acesso e a interpretação de dados públicos sobre a educação brasileira, permitindo acompanhar avanços, identificar desigualdades e apoiar análises baseadas em evidências.

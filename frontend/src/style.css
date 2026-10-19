@@ -627,6 +627,31 @@ footer p {
   flex-basis: 100%;
   max-width: 100ch;
 }
+.footer-project-links {
+  display: flex;
+  flex-wrap: wrap;
+  flex-basis: 100%;
+  gap: 8px 24px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.footer-project-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 100%;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.footer-project-links a:hover {
+  color: var(--ink);
+}
+.footer-project-links svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
 .message {
   background: #e6eff3;
   border: 1px solid #a0b7c3;
@@ -1006,7 +1031,8 @@ footer p {
   color: var(--muted);
   font-size: 22px;
 }
-.search-select:focus-within {
+.search-select:focus-within,
+.search-select.is-open {
   z-index: 701;
 }
 .search-select-menu {
@@ -1022,6 +1048,8 @@ footer p {
   box-shadow: 0 4px 12px #183c5014;
 }
 .search-select-menu ul {
+  touch-action: pan-y pinch-zoom;
+  overscroll-behavior: contain;
   list-style: none;
   padding: 4px 0;
   margin: 0;
@@ -1401,5 +1429,12 @@ footer p {
   }
   .distribution-legend button > span:nth-child(2) {
     text-align: right;
+  }
+}
+
+@media (max-width: 700px) {
+  /* Avoid iOS input auto-zoom when the virtual keyboard opens. */
+  .search-select input {
+    font-size: 16px;
   }
 }

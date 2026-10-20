@@ -35,7 +35,8 @@ const busy = ref(false),
   error = ref(""),
   order = ref("highest"),
   query = ref(""),
-  limit = ref(30),
+  municipalityLimit = ref(30),
+  schoolLimit = ref(30),
   schoolId = ref("");
 const join = ref(null),
   joinBusy = ref(false),
@@ -263,10 +264,18 @@ watch(networks, (available) => {
 });
 watch([stage, network, () => props.city], () => {
   pause();
-  limit.value = 30;
+  municipalityLimit.value = 30;
+  schoolLimit.value = 30;
 });
-watch([query, order, year], () => {
-  limit.value = 30;
+watch(order, () => {
+  municipalityLimit.value = 30;
+});
+watch(year, () => {
+  municipalityLimit.value = 30;
+  schoolLimit.value = 30;
+});
+watch(query, () => {
+  schoolLimit.value = 30;
 });
 watch([schoolId, year, stage], () => {
   joinRequest++;
@@ -568,7 +577,7 @@ async function checkCensus() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="r in ranked.slice(0, limit)" :key="r.municipality_id">
+              <tr v-for="r in ranked.slice(0, municipalityLimit)" :key="r.municipality_id">
                 <th scope="row">
                   <button
                     class="city-link"
@@ -597,9 +606,9 @@ async function checkCensus() {
           </table>
         </div>
         <button
-          v-if="ranked.length > limit"
+          v-if="ranked.length > municipalityLimit"
           class="button"
-          @click="limit += 30"
+          @click="municipalityLimit += 30"
         >
           Mostrar mais municípios
         </button>
@@ -632,7 +641,7 @@ async function checkCensus() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="r in schoolRanking.slice(0, limit)" :key="r.school_id">
+              <tr v-for="r in schoolRanking.slice(0, schoolLimit)" :key="r.school_id">
                 <th scope="row">
                   <button
                     class="city-link"
@@ -666,9 +675,9 @@ async function checkCensus() {
           sem nota aparecem ao final para consulta.
         </p>
         <button
-          v-if="schoolRanking.length > limit"
+          v-if="schoolRanking.length > schoolLimit"
           class="button"
-          @click="limit += 30"
+          @click="schoolLimit += 30"
         >
           Mostrar mais escolas
         </button>

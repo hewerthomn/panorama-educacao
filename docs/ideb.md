@@ -168,8 +168,11 @@ rede e território. Não é taxa de participação de todas as escolas, nem sign
 que todas as linhas sem nota oferecem a etapa em todas as edições. Restrições
 de divulgação e impactos da pandemia em 2021 devem orientar comparações.
 
-Dados iniciais versionados: Rondônia, 2021/2023/2025, três etapas, 5.376
-observações. As demais UFs têm estado de não processado explícito na interface;
-podem ser geradas sem o Censo. O modo nacional foi executado e validado para as
-27 UFs em diretório temporário (aproximadamente 214 MB), fora do commit.
-A [conferência real](ideb-validation.md) registra 54 células oficiais verificadas.
+Dados versionados: as 27 UFs, edições 2021/2023/2025 e resultados estaduais,
+municipais e escolares nas três etapas, respeitando a disponibilidade efetiva de
+cada planilha. O Censo Escolar também está versionado de 2020 a 2025 para as 27
+UFs. A interface carrega os arquivos do Ideb sob demanda por UF e etapa. O comando
+`python -m edu_panorama ideb status --years 2021,2023,2025` verifica esquema,
+completude e hashes dos resultados publicados sem baixar nem regenerar fontes.
+Veja a [conferência das planilhas oficiais](ideb-validation.md) e as limitações
+de cobertura descritas nesta página.

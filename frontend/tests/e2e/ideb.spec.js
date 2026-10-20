@@ -13,7 +13,7 @@ const cities = [
   { id: "1100023", name: "Município B" },
   { id: "1100031", name: "Município sem nota" },
 ];
-function records(uf, stage, level) {
+function records(uf, stage, level, cityList = cities) {
   const rows = [];
   for (const [i, year] of years.entries()) {
     const base = {
@@ -33,7 +33,7 @@ function records(uf, stage, level) {
         ideb: [5.3, 5.5, 5.9][i],
       });
     else
-      for (const [j, city] of cities.entries()) {
+      for (const [j, city] of cityList.entries()) {
         const ideb =
           j === 2
             ? null
@@ -44,7 +44,7 @@ function records(uf, stage, level) {
           municipality_id: city.id,
           municipality_name: city.name,
           name: level === "school" ? `Escola ${j + 1}` : city.name,
-          school_id: level === "school" ? `1100000${j + 1}` : null,
+          school_id: level === "school" ? String(11000001 + j) : null,
           ideb,
           status: ideb === null ? "not_published" : "available",
         });
@@ -55,7 +55,7 @@ function records(uf, stage, level) {
 async function setup(
   page,
   context,
-  { fail = false, delay = false, noCensus = false } = {},
+  { fail = false, delay = false, noCensus = false, cityList = cities } = {},
 ) {
   const requested = [],
     errors = [];
@@ -111,7 +111,7 @@ async function setup(
         state_name: uf === "RO" ? "Rondônia" : "Acre",
         years,
         stages,
-        municipalities: cities,
+        municipalities: cityList,
         generated_at: "2026-10-19",
         source_page: "https://www.gov.br/inep",
         sources: {},
@@ -150,7 +150,7 @@ async function setup(
         uf,
         stage,
         level,
-        records: records(uf, stage, level),
+        records: records(uf, stage, level, cityList),
       },
     });
   });
@@ -275,6 +275,35 @@ test("Ideb oficial independente: mapa fixo, filtros, histórico escolar, ranking
     .getByRole("button", { name: "Panorama por ano", exact: true })
     .click();
   await expect(page.locator("#year-slider")).toBeVisible();
+});
+
+test("rankings municipal e escolar mantêm paginação independente", async ({ page, context, isMobile }) => {
+  const manyCities = Array.from({ length: 40 }, (_, i) => ({
+    id: String(1100000 + i),
+    name: `Município ${String(i + 1).padStart(2, "0")}`,
+  }));
+  await setup(page, context, { cityList: manyCities });
+  await expect(page.locator(".ideb-ranking tbody tr")).toHaveCount(30);
+  await expect(page.locator(".ideb-schools tbody tr")).toHaveCount(30);
+  await page.getByRole("button", { name: "Mostrar mais municípios" }).click();
+  await expect(page.locator(".ideb-ranking tbody tr")).toHaveCount(39);
+  await expect(page.locator(".ideb-schools tbody tr")).toHaveCount(30);
+  await page.getByRole("button", { name: "Mostrar mais escolas" }).click();
+  await expect(page.locator(".ideb-schools tbody tr")).toHaveCount(40);
+  await expect(page.locator(".ideb-ranking tbody tr")).toHaveCount(39);
+  await page.getByRole("searchbox", { name: "Pesquisar escola ou código Inep" }).fill("Escola");
+  await expect(page.locator(".ideb-schools tbody tr")).toHaveCount(30);
+  await expect(page.locator(".ideb-ranking tbody tr")).toHaveCount(39);
+  await filters(page, isMobile, async () => {
+    await page.getByRole("combobox", { name: "Ordenar resultados", exact: true }).selectOption("lowest");
+  });
+  await expect(page.locator(".ideb-ranking tbody tr")).toHaveCount(30);
+  await expect(page.locator(".ideb-schools tbody tr")).toHaveCount(30);
+  await filters(page, isMobile, async () => {
+    await page.getByRole("combobox", { name: "Etapa de ensino", exact: true }).selectOption("anos_finais");
+  });
+  await expect(page.locator(".ideb-ranking tbody tr")).toHaveCount(30);
+  await expect(page.locator(".ideb-schools tbody tr")).toHaveCount(30);
 });
 test("erros assíncronos permitem retry sem mostrar resultados antigos", async ({
   page,

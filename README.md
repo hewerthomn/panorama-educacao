@@ -43,7 +43,7 @@ Os dados são obtidos de fontes públicas oficiais:
 - [Inep — Resultados oficiais do Ideb 2005–2025](https://www.gov.br/inep/pt-br/areas-de-atuacao/pesquisas-estatisticas-e-indicadores/ideb/resultados/2005-2025)
 - [IBGE — Dados geográficos e municípios](https://servicodados.ibge.gov.br/)
 
-A infraestrutura utiliza Censo Escolar e cartografia IBGE, inicialmente de 2020 a 2025. O Ideb utiliza as planilhas oficiais de resultados do Inep, inicialmente nas edições de 2021, 2023 e 2025.
+A infraestrutura utiliza dados do Censo Escolar de 2020 a 2025 para as 27 UFs e cartografia municipal do IBGE. O Ideb utiliza as planilhas oficiais de resultados do Inep, com as edições 2021, 2023 e 2025 publicadas para as 27 UFs, nas três etapas conforme a disponibilidade de cada fonte.
 
 ## Desempenho educacional — Ideb
 
@@ -66,10 +66,10 @@ regenerar infraestrutura. Links e arquivos locais são configuráveis em `config
 HTTPS mantém a verificação de certificados. `status` verifica esquema e integridade;
 saídas completas são puladas e `--force` permite reprocessar.
 
-Os dados iniciais versionados abrangem **Rondônia, 2021/2023/2025 e as três etapas**,
-com 5.376 observações. O modo nacional foi validado em saída temporária para as 27 UFs;
-as demais UFs podem ser processadas com `--all`. A interface informa quando uma UF
-não foi processada. As planilhas brutas não são publicadas.
+Os JSONs versionados abrangem as **27 UFs**, nas edições 2021, 2023 e 2025, com notas
+estaduais, municipais e escolares nas etapas de anos iniciais, anos finais e ensino médio
+conforme a disponibilidade oficial. As planilhas brutas não são publicadas. O comando
+`status` confere esquema, completude e hashes dos arquivos estáticos.
 
 A nota do território é sempre a publicada para a UF ou município; **não é a média das
 escolas**. Valores ausentes e restritos não são zero. A cobertura conta resultados
@@ -80,7 +80,7 @@ na edição de 2021. O cruzamento com o Censo usa código Inep e o ano da ediç�
 preservando a etapa; não estabelece causalidade.
 
 Consulte o [mapeamento das fontes, esquema e limitações](docs/ideb.md) e a
-[conferência de 54 células reais de Rondônia](docs/ideb-validation.md).
+[conferência dos resultados publicados com planilhas oficiais](docs/ideb-validation.md).
 
 ## Executando o projeto
 

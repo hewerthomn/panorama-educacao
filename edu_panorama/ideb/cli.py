@@ -48,10 +48,17 @@ def main(argv=None):
         output = args.output_dir or resolve(settings.get('output_dir', 'frontend/public/data/ideb'))
         states = [args.uf] if args.uf else list(UFS)
         if args.command == 'status':
+            complete_count = 0
             for uf in states:
                 ok, reason = state_status(uf, args.years, output, signature(settings))
                 print(f'{uf}: {"COMPLETO" if ok else reason}')
-            return 0
+                complete_count += int(ok)
+            pending = len(states) - complete_count
+            summary = f'{complete_count}/{len(states)} UFs completas'
+            if pending:
+                summary += f' — {pending} pendentes'
+            print(summary)
+            return int(pending > 0)
         cache = args.cache_dir or resolve(settings.get('cache_dir', 'data/raw/ideb'))
         generate(states, args.years, output_dir=output, cache_dir=cache, settings=settings,
                  force=args.force, no_download=args.no_download)

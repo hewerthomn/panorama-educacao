@@ -85,6 +85,46 @@ test("ranking exclui municípios sem nota e ordena notas e diferenças", () => {
     -0.3,
   );
 });
+test("histórico do ranking mantém identidade territorial, etapa e rede", () => {
+  const observations = [
+    { year: 2021, level: "school", school_id: "123", municipality_id: "123", stage: "ai", network: "Estadual", ideb: 4, name: "Escola" },
+    { year: 2023, level: "school", school_id: "123", municipality_id: "123", stage: "ai", network: "Estadual", ideb: null, name: "Escola" },
+    { year: 2025, level: "school", school_id: "123", municipality_id: "123", stage: "ai", network: "Estadual", ideb: 6, name: "Escola" },
+    { year: 2023, level: "school", school_id: "123", municipality_id: "123", stage: "af", network: "Estadual", ideb: 3, name: "Escola" },
+    { year: 2025, level: "school", school_id: "123", municipality_id: "123", stage: "af", network: "Estadual", ideb: 5, name: "Escola" },
+    { year: 2021, level: "school", school_id: "123", municipality_id: "123", stage: "ai", network: "Municipal", ideb: 8, name: "Escola" },
+    { year: 2025, level: "school", school_id: "123", municipality_id: "123", stage: "ai", network: "Municipal", ideb: 7, name: "Escola" },
+    { year: 2021, level: "municipality", school_id: null, municipality_id: "123", stage: "ai", network: "Pública", ideb: 5, name: "Município" },
+    { year: 2025, level: "municipality", school_id: null, municipality_id: "123", stage: "ai", network: "Pública", ideb: 6, name: "Município" },
+    { year: 2025, level: "school", school_id: "999", municipality_id: "321", stage: "ai", network: "Estadual", ideb: 6, name: "Outra escola" },
+  ];
+  const ranked = rankResults(observations, [], {
+    year: 2025, stage: "ai", network: "Pública", order: "highest",
+  });
+  const byId = Object.fromEntries(ranked.map((r) => [`${r.level}:${r.school_id || r.municipality_id}:${r.network}`, r]));
+  assert.equal(byId["school:123:Estadual"].previous.year, 2021);
+  assert.equal(byId["school:123:Estadual"].delta, 2);
+  assert.equal(byId["school:123:Municipal"].delta, -1);
+  assert.equal(byId["municipality:123:Pública"].delta, 1);
+  assert.equal(byId["school:999:Estadual"].previous, null);
+  assert.deepEqual(
+    rankResults(observations, [], { year: 2025, stage: "ai", network: "Pública", order: "gain" }).map((r) => r.name),
+    ["Escola", "Município", "Escola"],
+  );
+  assert.deepEqual(
+    rankResults(observations, [], { year: 2025, stage: "ai", network: "Pública", order: "loss" }).map((r) => r.name),
+    ["Escola", "Município", "Escola"],
+  );
+});
+test("empates no ranking têm ordenação determinística por nome e código", () => {
+  const tied = ["B", "A"].map((name) => ({
+    year: 2025, level: "municipality", municipality_id: name,
+    stage: "anos_iniciais", network: "Pública", ideb: 6, name,
+  }));
+  assert.deepEqual(rankResults(tied, [], {
+    year: 2025, stage: "anos_iniciais", network: "Pública", order: "highest",
+  }).map((r) => r.name), ["A", "B"]);
+});
 test("uma escola possui observações separadas por etapa, edição e rede", () => {
   const schools = rows
     .slice(0, 3)

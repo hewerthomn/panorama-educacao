@@ -149,8 +149,27 @@ def test_etl_cli_status_skip_force_schema_and_separation(tmp_path,monkeypatch):
     manifest['schema_version']=0;(output/'RO/manifest.json').write_text(json.dumps(manifest))
     assert not state_status('RO',[2021],output)[0]
     config=tmp_path/'config.toml';config.write_text('[ideb]\noutput_dir="output"\n')
-    assert main(['ideb','--config',str(config),'status','--uf','RO'])==0
+    assert main(['ideb','--config',str(config),'status','--uf','RO'])==1
     assert main(['ideb','--config',str(config),'generate','--uf','RO','--no-download'])==1
+
+
+def test_ideb_status_returns_failure_for_incomplete_requested_ufs(tmp_path, monkeypatch, capsys):
+    from edu_panorama.ideb import cli
+    monkeypatch.setattr(cli, 'UFS', {'RO': (11, 'Rondônia'), 'AC': (12, 'Acre')})
+    config = tmp_path / 'config.toml'
+    config.write_text('[ideb]\noutput_dir="output"\n')
+    monkeypatch.setattr(cli, 'state_status', lambda uf, *args: (uf == 'RO', 'arquivo ausente'))
+
+    assert cli.main(['--config', str(config), 'status']) == 1
+    output = capsys.readouterr().out
+    assert 'RO: COMPLETO' in output
+    assert 'AC: arquivo ausente' in output
+    assert '1/2 UFs completas — 1 pendentes' in output
+
+    assert cli.main(['--config', str(config), 'status', '--uf', 'RO']) == 0
+    assert '1/1 UFs completas' in capsys.readouterr().out
+    assert cli.main(['--config', str(config), 'status', '--uf', 'AC']) == 1
+    assert '0/1 UFs completas — 1 pendentes' in capsys.readouterr().out
 
 
 @pytest.mark.parametrize('name,uf', [('R. G. do Norte','RN'), ('R. G. do Sul','RS'), ('M. G. do Sul','MS')])

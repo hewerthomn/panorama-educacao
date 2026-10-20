@@ -108,18 +108,49 @@ export function rankResults(
   years,
   { year, stage, network, city = "all", order = "highest" },
 ) {
-  return filterResults(rows, { year, stage, network, city })
-    .filter((r) => Number.isFinite(r.ideb))
-    .map((row) => {
-      const series = filterResults(rows, {
-        stage,
-        network,
-        city: row.school_id ? "all" : row.municipality_id,
-        school: row.school_id,
-      });
-      const previous = previousAvailable(series, year);
-      return { ...row, previous, delta: difference(row.ideb, previous?.ideb) };
-    })
+  const histories = new Map();
+  const comparable = rows.filter(
+    (r) =>
+      (stage == null || r.stage === stage) &&
+      (city === "all" || r.municipality_id === city) &&
+      (!network ||
+        (r.level === "school"
+          ? networkMatches(r.network, network)
+          : r.network === network)),
+  );
+  const identity = (r) =>
+    JSON.stringify([
+      r.level,
+      r.level === "school" ? r.school_id : r.municipality_id,
+      r.stage,
+      r.network,
+    ]);
+  for (const row of comparable) {
+    const key = identity(row);
+    let history = histories.get(key);
+    if (!history) {
+      history = { current: [], previous: null };
+      histories.set(key, history);
+    }
+    if (row.year === year) history.current.push(row);
+    else if (
+      row.year < year &&
+      Number.isFinite(row.ideb) &&
+      (!history.previous || row.year > history.previous.year)
+    ) {
+      history.previous = row;
+    }
+  }
+  return [...histories.values()]
+    .flatMap(({ current, previous }) =>
+      current
+        .filter((row) => Number.isFinite(row.ideb))
+        .map((row) => ({
+          ...row,
+          previous,
+          delta: difference(row.ideb, previous?.ideb),
+        })),
+    )
     .filter((r) => !["gain", "loss"].includes(order) || r.delta !== null)
     .sort(
       (a, b) =>
